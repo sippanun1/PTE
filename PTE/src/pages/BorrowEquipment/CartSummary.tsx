@@ -1,19 +1,16 @@
 import { useState } from "react"
+import { useNavigate } from "react-router-dom"
 import Header from "../../components/Header"
-import { type Equipment } from "../../data/equipment"
-
-interface SelectedEquipment extends Equipment {
-  selectedQuantity: number
-}
+import type { SelectedEquipment } from "../../App"
 
 interface CartSummaryProps {
-  selectedItems: SelectedEquipment[]
-  onNavigateBack: () => void
-  onProceedToConfirm: (items: SelectedEquipment[]) => void
+  cartItems: SelectedEquipment[]
+  setCartItems: (items: SelectedEquipment[]) => void
 }
 
-export default function CartSummary({ selectedItems, onNavigateBack, onProceedToConfirm }: CartSummaryProps) {
-  const [items, setItems] = useState<SelectedEquipment[]>(selectedItems)
+export default function CartSummary({ cartItems, setCartItems }: CartSummaryProps) {
+  const navigate = useNavigate()
+  const [items, setItems] = useState<SelectedEquipment[]>(cartItems)
 
   const handleAddQuantity = (equipmentId: string) => {
     setItems(prev =>
@@ -40,12 +37,10 @@ export default function CartSummary({ selectedItems, onNavigateBack, onProceedTo
   const handleRemoveItem = (equipmentId: string) => {
     setItems(prev => prev.filter(item => item.id !== equipmentId))
   }
-
   const handleConfirm = () => {
-    onProceedToConfirm(items)
+    setCartItems(items)
+    navigate('/borrow/confirm')
   }
-
-  const totalQuantity = items.reduce((sum, item) => sum + item.selectedQuantity, 0)
 
   return (
     <div
@@ -170,7 +165,7 @@ export default function CartSummary({ selectedItems, onNavigateBack, onProceedTo
           {/* Buttons */}
           <div className="w-full flex gap-3 mb-6">
             <button
-              onClick={onNavigateBack}
+              onClick={() => navigate(-1)}
               className="
                 flex-1
                 px-4 py-2

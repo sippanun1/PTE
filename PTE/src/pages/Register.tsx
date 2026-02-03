@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { useNavigate } from "react-router-dom"
 import Header from "../components/Header"
 
 interface RegisterForm {
@@ -10,11 +11,8 @@ interface RegisterForm {
   email: string
 }
 
-interface RegisterProps {
-  onNavigateToLogin: () => void
-}
-
-export default function Register({ onNavigateToLogin }: RegisterProps) {
+export default function Register() {
+  const navigate = useNavigate()
   const [form, setForm] = useState<RegisterForm>({
     fullName: "",
     idNumber: "",
@@ -38,7 +36,7 @@ export default function Register({ onNavigateToLogin }: RegisterProps) {
 
   const handleLoginFromModal = () => {
     setShowSuccessModal(false)
-    onNavigateToLogin()
+    navigate('/login')
   }
 
   return (
@@ -169,7 +167,7 @@ export default function Register({ onNavigateToLogin }: RegisterProps) {
           </form>
 
           <button
-            onClick={onNavigateToLogin}
+            onClick={() => navigate('/login')}
             className="
               mt-6
               px-8 py-2

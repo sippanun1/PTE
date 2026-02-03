@@ -1,18 +1,15 @@
+import { useNavigate } from "react-router-dom"
 import Header from "../../components/Header"
-import { type Equipment } from "../../data/equipment"
-
-interface SelectedEquipment extends Equipment {
-  selectedQuantity: number
-}
+import type { SelectedEquipment } from "../../App"
 
 interface ConfirmSummaryProps {
-  selectedItems: SelectedEquipment[]
-  onNavigateBack: () => void
-  onConfirm: () => void
+  cartItems: SelectedEquipment[]
+  setCartItems?: (items: SelectedEquipment[]) => void
 }
 
-export default function ConfirmSummary({ selectedItems, onNavigateBack, onConfirm }: ConfirmSummaryProps) {
-  const totalItems = selectedItems.reduce((sum, item) => sum + item.selectedQuantity, 0)
+export default function ConfirmSummary({ cartItems }: ConfirmSummaryProps) {
+  const navigate = useNavigate()
+  const totalItems = cartItems.reduce((sum, item) => sum + item.selectedQuantity, 0)
 
   return (
     <div
@@ -55,7 +52,7 @@ export default function ConfirmSummary({ selectedItems, onNavigateBack, onConfir
           <div className="w-full mb-6">
             <h3 className="text-sm font-semibold text-gray-800 mb-3">รายการยืมทั้งหมด ({totalItems} รายการ)</h3>
             <div className="space-y-2">
-              {selectedItems.map((item) => (
+              {cartItems.map((item) => (
                 <div
                   key={item.id}
                   className="bg-white border border-gray-200 rounded-lg p-3 flex justify-between items-center"
@@ -84,7 +81,7 @@ export default function ConfirmSummary({ selectedItems, onNavigateBack, onConfir
           {/* Buttons */}
           <div className="w-full flex gap-3 mb-6">
             <button
-              onClick={onNavigateBack}
+              onClick={() => navigate(-1)}
               className="
                 flex-1
                 px-4 py-2
@@ -99,7 +96,7 @@ export default function ConfirmSummary({ selectedItems, onNavigateBack, onConfir
               ย้อนกลับ
             </button>
             <button
-              onClick={onConfirm}
+              onClick={() => navigate('/borrow/completion')}
               className="
                 flex-1
                 px-4 py-2

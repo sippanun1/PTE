@@ -11,9 +11,10 @@ interface Room {
 
 interface ListPopularRoomProps {
   rooms: Room[]
+  onBookNow?: (room: Room) => void
 }
 
-export default function ListPopularRoom({ rooms }: ListPopularRoomProps) {
+export default function ListPopularRoom({ rooms, onBookNow }: ListPopularRoomProps) {
   const getStatusButtonColor = (availability: string) => {
     if (availability === "Available") {
       return "#228B22" // Green for available
@@ -73,6 +74,7 @@ export default function ListPopularRoom({ rooms }: ListPopularRoomProps) {
 
               {/* Book Now Button */}
               <button
+                onClick={() => onBookNow?.(room)}
                 className="
                   w-full
                   py-2

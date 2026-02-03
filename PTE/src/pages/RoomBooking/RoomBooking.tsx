@@ -1,6 +1,8 @@
+import { useNavigate } from "react-router-dom"
 import Header from "../../components/Header"
 import BookRoomButton from "../../components/BookRoomButton"
 import ListPopularRoom from "../../components/ListPopularRoom"
+import type { BookingData } from "../../App"
 
 interface Room {
   id: string
@@ -15,8 +17,7 @@ interface Room {
 }
 
 interface RoomBookingProps {
-  onNavigateBack: () => void
-  onNavigateToAvailability: () => void
+  setBookingData: (data: BookingData) => void
 }
 
 const rooms: Room[] = [
@@ -66,7 +67,8 @@ const rooms: Room[] = [
   }
 ]
 
-export default function RoomBooking({ onNavigateBack, onNavigateToAvailability }: RoomBookingProps) {
+export default function RoomBooking({ setBookingData }: RoomBookingProps) {
+  const navigate = useNavigate()
   return (
     <div
       className="
@@ -87,20 +89,23 @@ export default function RoomBooking({ onNavigateBack, onNavigateToAvailability }
             <BookRoomButton
               emoji="📅"
               label="Room Availability"
-              onClick={onNavigateToAvailability}
+              onClick={() => navigate('/room-booking/availability')}
             />
             <BookRoomButton
               emoji="📋"
               label="My Bookings"
-              onClick={() => {}}
+              onClick={() => navigate('/room-booking/my-bookings')}
             />
           </div>
           {/* Popular Rooms List */}
-          <ListPopularRoom rooms={rooms} />
+          <ListPopularRoom 
+            rooms={rooms}
+            onBookNow={(room) => { setBookingData({ room: room.name, roomImage: room.image, time: '' }); navigate('/room-booking/form') }}
+          />
 
           {/* Back Button */}
           <button
-            onClick={onNavigateBack}
+            onClick={() => navigate(-1)}
             className="
               w-full
               py-3

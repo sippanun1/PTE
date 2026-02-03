@@ -1,13 +1,10 @@
 import { useState } from "react"
+import { useNavigate } from "react-router-dom"
 import type { LoginForm } from "../types/auth"
 import Header from "../components/Header"
 
-interface LoginProps {
-  onNavigateToRegister: () => void
-  onNavigateToHome: () => void
-}
-
-export default function Login({ onNavigateToRegister, onNavigateToHome }: LoginProps) {
+export default function Login() {
+  const navigate = useNavigate()
   const [form, setForm] = useState<LoginForm>({
     username: "",
     password: ""
@@ -20,7 +17,7 @@ export default function Login({ onNavigateToRegister, onNavigateToHome }: LoginP
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault()
     console.log(form)
-    onNavigateToHome()
+    navigate('/home')
   }
 
   return (
@@ -90,7 +87,7 @@ export default function Login({ onNavigateToRegister, onNavigateToHome }: LoginP
             </form>
 
             <button
-            onClick={onNavigateToRegister}
+            onClick={() => navigate('/register')}
             className="
                 mt-6
                 px-8 py-2
@@ -102,6 +99,21 @@ export default function Login({ onNavigateToRegister, onNavigateToHome }: LoginP
             "
             >
             Register
+            </button>
+
+            <button
+            onClick={() => navigate('/admin')}
+            className="
+                mt-3
+                px-8 py-2
+                rounded-full
+                border border-gray-400
+                text-sm text-gray-600
+                hover:bg-gray-100
+                transition
+            "
+            >
+            Admin (Temp)
             </button>
         </div>
         </div>

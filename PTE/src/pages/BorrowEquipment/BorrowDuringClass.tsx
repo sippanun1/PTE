@@ -1,12 +1,9 @@
 import { useState, useEffect } from "react"
+import { useNavigate } from "react-router-dom"
 import Header from "../../components/Header"
 
-interface BorrowDuringClassProps {
-  onNavigateBack: () => void
-  onNavigateToEquipment: () => void
-}
-
-export default function BorrowDuringClass({ onNavigateBack, onNavigateToEquipment }: BorrowDuringClassProps) {
+export default function BorrowDuringClass() {
+  const navigate = useNavigate()
   const [currentDate, setCurrentDate] = useState<string>("")
   const [currentTime, setCurrentTime] = useState<string>("")
   const [selectedDate, setSelectedDate] = useState<string>("20/12/2568")
@@ -72,7 +69,7 @@ export default function BorrowDuringClass({ onNavigateBack, onNavigateToEquipmen
         date: selectedDate,
         time: selectedTime === "morning" ? "(09.30-10.30)" : "(13.30-14.30)"
       })
-      onNavigateToEquipment()
+      navigate('/borrow/equipment')
     }
   }
 
@@ -234,7 +231,7 @@ export default function BorrowDuringClass({ onNavigateBack, onNavigateToEquipmen
           {/* Buttons */}
           <div className="w-full flex gap-4">
             <button
-              onClick={onNavigateBack}
+              onClick={() => navigate(-1)}
               className="
                 flex-1 h-11
                 rounded-full

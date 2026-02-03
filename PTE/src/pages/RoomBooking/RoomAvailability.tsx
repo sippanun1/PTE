@@ -1,5 +1,7 @@
 import { useState } from "react"
+import { useNavigate } from "react-router-dom"
 import Header from "../../components/Header"
+import type { BookingData } from "../../App"
 
 interface TimeSlot {
   time: string
@@ -17,7 +19,7 @@ interface RoomSchedule {
 }
 
 interface RoomAvailabilityProps {
-  onNavigateBack: () => void
+  setBookingData: (data: BookingData) => void
 }
 
 const timeHeaders = ["09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00"]
@@ -89,7 +91,8 @@ const roomsSchedule: RoomSchedule[] = [
   }
 ]
 
-export default function RoomAvailability({ onNavigateBack }: RoomAvailabilityProps) {
+export default function RoomAvailability({ setBookingData }: RoomAvailabilityProps) {
+  const navigate = useNavigate()
   const [selectedDate, setSelectedDate] = useState<"today" | "tomorrow" | "custom">("today")
   const [showBookModal, setShowBookModal] = useState(false)
   const [selectedSlot, setSelectedSlot] = useState<{ room: string; time: string; label: string } | null>(null)
@@ -227,7 +230,7 @@ export default function RoomAvailability({ onNavigateBack }: RoomAvailabilityPro
 
           {/* Back Button */}
           <button
-            onClick={onNavigateBack}
+            onClick={() => navigate(-1)}
             className="
               w-full
               py-3
@@ -266,6 +269,12 @@ export default function RoomAvailability({ onNavigateBack }: RoomAvailabilityPro
             {/* Book Now Button */}
             <button
               onClick={() => {
+                // Find the room object to get the image
+                const room = roomsSchedule.find(r => r.name === selectedSlot.room)
+                if (room) {
+                  setBookingData({ room: selectedSlot.room, roomImage: room.image, time: selectedSlot.time })
+                  navigate('/room-booking/form')
+                }
                 setShowBookModal(false)
                 setSelectedSlot(null)
               }}

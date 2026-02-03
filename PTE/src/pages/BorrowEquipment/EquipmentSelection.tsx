@@ -1,18 +1,16 @@
 import { useState, useEffect } from "react"
-import Header from "../../components/Header"
-import { equipmentData, categories, welldingTypes, machineTypes, type Equipment } from "../../data/equipment"
+import { useNavigate } from "react-router-dom"
+import { equipmentData, categories, welldingTypes, machineTypes } from "../../data/equipment"
 import shoppingCartIcon from "../../assets/shoppingcart.svg"
-
-interface SelectedEquipment extends Equipment {
-  selectedQuantity: number
-}
+import type { SelectedEquipment } from "../../App"
 
 interface EquipmentSelectionProps {
-  onNavigateBack: () => void
-  onNavigateToCart: (selectedItems: SelectedEquipment[]) => void
+  cartItems?: SelectedEquipment[]
+  setCartItems: (items: SelectedEquipment[]) => void
 }
 
-export default function EquipmentSelection({ onNavigateBack, onNavigateToCart }: EquipmentSelectionProps) {
+export default function EquipmentSelection({ setCartItems }: EquipmentSelectionProps) {
+  const navigate = useNavigate()
   const [currentDate, setCurrentDate] = useState<string>("")
   const [currentTime, setCurrentTime] = useState<string>("")
   const [searchTerm, setSearchTerm] = useState<string>("")
@@ -72,10 +70,6 @@ export default function EquipmentSelection({ onNavigateBack, onNavigateToCart }:
     return []
   }
 
-  const handleSelectEquipment = (equipmentId: string) => {
-    console.log("Selected equipment:", equipmentId)
-  }
-
   const handleAddQuantity = (equipmentId: string) => {
     setSelectedItems(prev => {
       const newMap = new Map(prev)
@@ -107,7 +101,8 @@ export default function EquipmentSelection({ onNavigateBack, onNavigateToCart }:
         }
       }
     )
-    onNavigateToCart(selectedEquipmentList)
+    setCartItems(selectedEquipmentList)
+    navigate('/borrow/cart')
   }
 
   const totalItems = Array.from(selectedItems.values()).reduce((sum, qty) => sum + qty, 0)
@@ -403,7 +398,7 @@ export default function EquipmentSelection({ onNavigateBack, onNavigateToCart }:
 
           {/* Back Button */}
           <button
-            onClick={onNavigateBack}
+            onClick={() => navigate(-1)}
             className="
               px-8 py-2
               rounded-full

@@ -1,13 +1,9 @@
 import { useState, useEffect } from "react"
+import { useNavigate } from "react-router-dom"
 import Header from "../components/Header"
 
-interface HomeProps {
-  onNavigateToBorrow: () => void
-  onNavigateToReturn: () => void
-  onNavigateToRoomBooking: () => void
-}
-
-export default function Home({ onNavigateToBorrow, onNavigateToReturn, onNavigateToRoomBooking }: HomeProps) {
+export default function Home() {
+  const navigate = useNavigate()
   const [currentDate, setCurrentDate] = useState<string>("")
   const [currentTime, setCurrentTime] = useState<string>("")
 
@@ -79,7 +75,7 @@ export default function Home({ onNavigateToBorrow, onNavigateToReturn, onNavigat
           {/* Action Buttons */}
           <div className="w-full flex flex-col gap-4">
             <button
-              onClick={onNavigateToBorrow}
+              onClick={() => navigate('/borrow')}
               className="
                 w-full h-12
                 rounded-full
@@ -93,7 +89,7 @@ export default function Home({ onNavigateToBorrow, onNavigateToReturn, onNavigat
             </button>
 
             <button
-              onClick={onNavigateToReturn}
+              onClick={() => navigate('/return')}
               className="
                 w-full h-12
                 rounded-full
@@ -107,7 +103,7 @@ export default function Home({ onNavigateToBorrow, onNavigateToReturn, onNavigat
             </button>
 
             <button
-              onClick={onNavigateToRoomBooking}
+              onClick={() => navigate('/room-booking')}
               className="
                 w-full h-12
                 rounded-full
@@ -120,18 +116,6 @@ export default function Home({ onNavigateToBorrow, onNavigateToReturn, onNavigat
               ยืมใช้ห้อง
             </button>
 
-            <button
-              className="
-                w-full h-12
-                rounded-full
-                bg-pink-400
-                text-white text-base font-medium
-                hover:bg-pink-500
-                transition
-              "
-            >
-              คืนห้อง
-            </button>
           </div>
         </div>
       </div>

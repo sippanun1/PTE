@@ -1,17 +1,14 @@
+import { useNavigate } from "react-router-dom"
 import Header from "../../components/Header"
-import { type Equipment } from "../../data/equipment"
-
-interface SelectedEquipment extends Equipment {
-  selectedQuantity: number
-}
+import type { SelectedEquipment } from "../../App"
 
 interface CompletionPageProps {
-  selectedItems: SelectedEquipment[]
-  onNavigateHome: () => void
+  cartItems: SelectedEquipment[]
+  setCartItems: (items: SelectedEquipment[]) => void
 }
 
-export default function CompletionPage({ selectedItems, onNavigateHome }: CompletionPageProps) {
-  const totalItems = selectedItems.reduce((sum, item) => sum + item.selectedQuantity, 0)
+export default function CompletionPage({ cartItems, setCartItems }: CompletionPageProps) {
+  const navigate = useNavigate()
 
   return (
     <div
@@ -50,7 +47,7 @@ export default function CompletionPage({ selectedItems, onNavigateHome }: Comple
 
           {/* Equipment Summary */}
           <div className="w-full mb-6">
-            {selectedItems.map((item) => (
+            {cartItems.map((item) => (
               <div
                 key={item.id}
                 className="bg-white rounded-lg p-4 mb-3 border border-gray-200"
@@ -62,7 +59,7 @@ export default function CompletionPage({ selectedItems, onNavigateHome }: Comple
                   </p>
                 </div>
                 <p className="text-xs text-gray-600">
-                  ประเภท: ยืมในคาบเรียน  ({selectedItems.length} รายการสิ่งของ)
+                  ประเภท: ยืมในคาบเรียน  ({cartItems.length} รายการสิ่งของ)
                 </p>
               </div>
             ))}
@@ -70,7 +67,10 @@ export default function CompletionPage({ selectedItems, onNavigateHome }: Comple
 
           {/* Completion Button */}
           <button
-            onClick={onNavigateHome}
+            onClick={() => {
+              setCartItems([])
+              navigate('/home')
+            }}
             className="
               w-full
               px-6 py-2

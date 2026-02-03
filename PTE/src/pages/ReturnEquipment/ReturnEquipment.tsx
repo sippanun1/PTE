@@ -1,11 +1,7 @@
 import { useState, useEffect } from "react"
+import { useNavigate } from "react-router-dom"
 import Header from "../../components/Header"
 import UserInfoBox from "../../components/UserInfoBox"
-
-interface ReturnEquipmentProps {
-  onNavigateBack: () => void
-  onNavigateToSummary: (equipment: EquipmentItem[]) => void
-}
 
 interface EquipmentItem {
   id: string
@@ -16,9 +12,13 @@ interface EquipmentItem {
   status: string
 }
 
-export default function ReturnEquipment({ onNavigateBack, onNavigateToSummary }: ReturnEquipmentProps) {
-  const [currentDate, setCurrentDate] = useState<string>("")
-  const [currentTime, setCurrentTime] = useState<string>("")
+interface ReturnEquipmentProps {
+  returnEquipment: EquipmentItem[]
+  setReturnEquipment: (equipment: EquipmentItem[]) => void
+}
+
+export default function ReturnEquipment({ setReturnEquipment }: ReturnEquipmentProps) {
+  const navigate = useNavigate()
   const [equipment, setEquipment] = useState<EquipmentItem[]>([
     { id: "1", name: "ครุภัณฑ์", code: "T001", checked: true, quantity: 1, status: "ปกติ" },
     { id: "2", name: "ครุภัณฑ์", code: "T002", checked: true, quantity: 1, status: "ชำรุด" },
@@ -26,25 +26,7 @@ export default function ReturnEquipment({ onNavigateBack, onNavigateToSummary }:
   ])
 
   useEffect(() => {
-    const updateDateTime = () => {
-      const now = new Date()
-      const date = now.toLocaleDateString("th-TH", {
-        year: "2-digit",
-        month: "2-digit",
-        day: "2-digit"
-      })
-      const time = now.toLocaleTimeString("th-TH", {
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit"
-      })
-      setCurrentDate(date)
-      setCurrentTime(time)
-    }
-
-    updateDateTime()
-    const interval = setInterval(updateDateTime, 1000)
-    return () => clearInterval(interval)
+    // Equipment initialization
   }, [])
 
   const handleCheckChange = (id: string) => {
@@ -160,7 +142,7 @@ export default function ReturnEquipment({ onNavigateBack, onNavigateToSummary }:
           {/* Buttons */}
           <div className="w-full flex gap-3 mb-6">
             <button
-              onClick={onNavigateBack}
+              onClick={() => navigate(-1)}
               className="
                 flex-1
                 px-4 py-2
@@ -175,7 +157,10 @@ export default function ReturnEquipment({ onNavigateBack, onNavigateToSummary }:
               ยืนยืน
             </button>
             <button
-              onClick={() => onNavigateToSummary(equipment)}
+              onClick={() => {
+                setReturnEquipment(equipment)
+                navigate('/return/summary')
+              }}
               className="
                 flex-1
                 px-4 py-2

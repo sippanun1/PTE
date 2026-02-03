@@ -1,14 +1,9 @@
 import { useState, useEffect } from "react"
+import { useNavigate } from "react-router-dom"
 import Header from "../../components/Header"
 
-interface BorrowEquipmentProps {
-  onNavigateBack: () => void
-  onNavigateToBorrowClass: () => void
-  onNavigateToBorrowTeaching: () => void
-  onNavigateToBorrowOutside: () => void
-}
-
-export default function BorrowEquipment({ onNavigateBack, onNavigateToBorrowClass, onNavigateToBorrowTeaching, onNavigateToBorrowOutside }: BorrowEquipmentProps) {
+export default function BorrowEquipment() {
+  const navigate = useNavigate()
   const [currentDate, setCurrentDate] = useState<string>("")
   const [currentTime, setCurrentTime] = useState<string>("")
 
@@ -58,7 +53,7 @@ export default function BorrowEquipment({ onNavigateBack, onNavigateToBorrowClas
           {/* Options */}
           <div className="w-full flex flex-col gap-4">
             <button
-              onClick={onNavigateToBorrowClass}
+              onClick={() => navigate('/borrow/during-class')}
               className="
                 w-full h-14
                 rounded-3xl
@@ -73,7 +68,7 @@ export default function BorrowEquipment({ onNavigateBack, onNavigateToBorrowClas
             </button>
 
             <button
-              onClick={onNavigateToBorrowTeaching}
+              onClick={() => navigate('/borrow/teaching')}
               className="
                 w-full h-14
                 rounded-3xl
@@ -87,7 +82,7 @@ export default function BorrowEquipment({ onNavigateBack, onNavigateToBorrowClas
             </button>
 
             <button
-              onClick={onNavigateToBorrowOutside}
+              onClick={() => navigate('/borrow/outside')}
               className="
                 w-full h-14
                 rounded-3xl
@@ -103,7 +98,7 @@ export default function BorrowEquipment({ onNavigateBack, onNavigateToBorrowClas
 
           {/* Back Button */}
           <button
-            onClick={onNavigateBack}
+            onClick={() => navigate(-1)}
             className="
               mt-8
               px-8 py-2

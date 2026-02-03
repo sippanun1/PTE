@@ -1,6 +1,7 @@
 import Header from "../../components/Header"
 import UserInfoBox from "../../components/UserInfoBox"
 import { useState } from "react"
+import { useNavigate } from "react-router-dom"
 
 interface EquipmentItem {
   id: string
@@ -12,9 +13,8 @@ interface EquipmentItem {
 }
 
 interface ReturnSummaryProps {
-  selectedEquipment: EquipmentItem[]
-  onNavigateBack: () => void
-  onConfirm: () => void
+  returnEquipment: EquipmentItem[]
+  setReturnEquipment: (equipment: EquipmentItem[]) => void
 }
 
 const getStatusColor = (status: string) => {
@@ -30,8 +30,9 @@ const getStatusColor = (status: string) => {
   }
 }
 
-export default function ReturnSummary({ selectedEquipment, onNavigateBack, onConfirm }: ReturnSummaryProps) {
-  const checkedItems = selectedEquipment.filter(item => item.checked)
+export default function ReturnSummary({ returnEquipment, setReturnEquipment }: ReturnSummaryProps) {
+  const navigate = useNavigate()
+  const checkedItems = returnEquipment.filter(item => item.checked)
   const totalItems = checkedItems.length
   const totalQuantity = checkedItems.reduce((sum, item) => sum + item.quantity, 0)
   const [showConfirmModal, setShowConfirmModal] = useState(false)
@@ -99,7 +100,7 @@ export default function ReturnSummary({ selectedEquipment, onNavigateBack, onCon
           {/* Buttons */}
           <div className="w-full flex gap-3 mb-6">
             <button
-              onClick={onNavigateBack}
+              onClick={() => navigate(-1)}
               className="
                 flex-1
                 px-4 py-2
@@ -142,14 +143,15 @@ export default function ReturnSummary({ selectedEquipment, onNavigateBack, onCon
             {/* Modal Content */}
             <div className="pt-5 w-full px-6 text-center">
               <div className="text-4xl mb-2">🔔</div>
-              <p className="text-sm font-semibold">โปรดตรวจสอบข้อมูลก่อนยืนยืน<br />เนื่องจากยืมขึ้นแล้ว อุปโภคมารณ์ที่ได้</p>
+              <p className="text-sm font-semibold">โปรดตรวจสอบข้อมูลให้ถูกต้อง<br />เมื่อกดยืนยันแล้ว จะไม่สามารถแก้ไขได้</p>
               </div>
             {/* Modal Buttons */}
             <div className="w-full px-6 py-6 flex gap-3">
               <button
                 onClick={() => {
                   setShowConfirmModal(false)
-                  onConfirm()
+                  setReturnEquipment([])
+                  navigate('/home')
                 }}
                 className="
                   flex-1
