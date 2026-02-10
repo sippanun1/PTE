@@ -3,25 +3,31 @@ import { useState } from 'react'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import Home from './pages/Home'
-import BorrowEquipment from './pages/BorrowEquipment/BorrowEquipment'
-import BorrowDuringClass from './pages/BorrowEquipment/BorrowDuringClass'
-import BorrowForTeaching from './pages/BorrowEquipment/BorrowForTeaching'
-import BorrowOutsideClass from './pages/BorrowEquipment/BorrowOutsideClass'
-import EquipmentSelection from './pages/BorrowEquipment/EquipmentSelection'
-import CartSummary from './pages/BorrowEquipment/CartSummary'
-import ConfirmSummary from './pages/BorrowEquipment/ConfirmSummary'
-import CompletionPage from './pages/BorrowEquipment/CompletionPage'
-import ReturnEquipment from './pages/ReturnEquipment/ReturnEquipment'
-import ReturnSummary from './pages/ReturnEquipment/ReturnSummary'
-import RoomBooking from './pages/RoomBooking/RoomBooking'
-import RoomAvailability from './pages/RoomBooking/RoomAvailability'
-import RoomBookingForm from './pages/RoomBooking/RoomBookingForm'
-import MyRoomBookings from './pages/RoomBooking/MyRoomBookings'
-import ReturnRoomForm from './pages/RoomBooking/ReturnRoomForm'
+import BorrowEquipment from './pages/User/BorrowEquipment/BorrowEquipment'
+import BorrowDuringClass from './pages/User/BorrowEquipment/BorrowDuringClass'
+import BorrowForTeaching from './pages/User/BorrowEquipment/BorrowForTeaching'
+import BorrowOutsideClass from './pages/User/BorrowEquipment/BorrowOutsideClass'
+import EquipmentSelection from './pages/User/BorrowEquipment/EquipmentSelection'
+import CartSummary from './pages/User/BorrowEquipment/CartSummary'
+import ConfirmSummary from './pages/User/BorrowEquipment/ConfirmSummary'
+import CompletionPage from './pages/User/BorrowEquipment/CompletionPage'
+import ReturnEquipment from './pages/User/ReturnEquipment/ReturnEquipment'
+import ReturnSummary from './pages/User/ReturnEquipment/ReturnSummary'
+import RoomBooking from './pages/User/RoomBooking/RoomBooking'
+import RoomAvailability from './pages/User/RoomBooking/RoomAvailability'
+import RoomBookingForm from './pages/User/RoomBooking/RoomBookingForm'
+import MyRoomBookings from './pages/User/RoomBooking/MyRoomBookings'
+import ReturnRoomForm from './pages/User/RoomBooking/ReturnRoomForm'
 import AdminDashboard from './pages/Admin/AdminDashboard'
 import AdminManageRooms from './pages/Admin/AdminManageRooms'
 import AdminManageEquipment from './pages/Admin/AdminManageEquipment'
+import RoomSchedule from './pages/Admin/RoomSchedule'
+import RoomBookingHistory from './pages/Admin/RoomBookingHistory'
 import BorrowReturnHistory from './pages/Admin/BorrowReturnHistory'
+import UserBorrowReturnHistory from './pages/User/BorrowReturnHistory'
+import AdminManagement from './pages/Admin/AdminManagement'
+import AdminHistory from './pages/Admin/AdminHistory'
+import ProtectedRoute from './components/ProtectedRoute'
 import type { Equipment } from './data/equipment'
 
 export interface SelectedEquipment extends Equipment {
@@ -64,26 +70,31 @@ function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
-        <Route path="/home" element={<Home />} />
-        <Route path="/borrow" element={<BorrowEquipment />} />
-        <Route path="/borrow/during-class" element={<BorrowDuringClass />} />
-        <Route path="/borrow/teaching" element={<BorrowForTeaching />} />
-        <Route path="/borrow/outside" element={<BorrowOutsideClass />} />
-        <Route path="/borrow/equipment" element={<EquipmentSelection cartItems={cartItems} setCartItems={setCartItems} />} />
-        <Route path="/borrow/cart" element={<CartSummary cartItems={cartItems} setCartItems={setCartItems} />} />
-        <Route path="/borrow/confirm" element={<ConfirmSummary cartItems={cartItems} setCartItems={setCartItems} />} />
-        <Route path="/borrow/completion" element={<CompletionPage cartItems={cartItems} setCartItems={setCartItems} />} />
-        <Route path="/return" element={<ReturnEquipment returnEquipment={returnEquipment} setReturnEquipment={setReturnEquipment} />} />
-        <Route path="/return/summary" element={<ReturnSummary returnEquipment={returnEquipment} setReturnEquipment={setReturnEquipment} />} />
-        <Route path="/room-booking" element={<RoomBooking setBookingData={setBookingData} />} />
-        <Route path="/room-booking/availability" element={<RoomAvailability setBookingData={setBookingData} />} />
-        <Route path="/room-booking/form" element={bookingData ? <RoomBookingForm bookingData={bookingData} onConfirmBooking={(confirmData) => console.log('Booking confirmed:', confirmData)} /> : <Navigate to="/room-booking" />} />
-        <Route path="/room-booking/my-bookings" element={<MyRoomBookings setReturnBookingData={setReturnBookingData} />} />
-        <Route path="/room-booking/return" element={returnBookingData ? <ReturnRoomForm booking={returnBookingData} onConfirmReturn={(returnData) => console.log('Return confirmed:', returnData)} /> : <Navigate to="/room-booking/my-bookings" />} />
-        <Route path="/admin" element={<AdminDashboard />} />
-        <Route path="/admin/manage-rooms" element={<AdminManageRooms />} />
-        <Route path="/admin/manage-equipment" element={<AdminManageEquipment />} />
-        <Route path="/admin/borrow-return-history" element={<BorrowReturnHistory />} />
+        <Route path="/home" element={<ProtectedRoute element={<Home />} />} />
+        <Route path="/borrow" element={<ProtectedRoute element={<BorrowEquipment />} />} />
+        <Route path="/borrow/during-class" element={<ProtectedRoute element={<BorrowDuringClass />} />} />
+        <Route path="/borrow/teaching" element={<ProtectedRoute element={<BorrowForTeaching />} />} />
+        <Route path="/borrow/outside" element={<ProtectedRoute element={<BorrowOutsideClass />} />} />
+        <Route path="/borrow/equipment" element={<ProtectedRoute element={<EquipmentSelection cartItems={cartItems} setCartItems={setCartItems} />} />} />
+        <Route path="/borrow/cart" element={<ProtectedRoute element={<CartSummary cartItems={cartItems} setCartItems={setCartItems} />} />} />
+        <Route path="/borrow/confirm" element={<ProtectedRoute element={<ConfirmSummary cartItems={cartItems} setCartItems={setCartItems} />} />} />
+        <Route path="/borrow/completion" element={<ProtectedRoute element={<CompletionPage cartItems={cartItems} setCartItems={setCartItems} />} />} />
+        <Route path="/return" element={<ProtectedRoute element={<ReturnEquipment returnEquipment={returnEquipment} setReturnEquipment={setReturnEquipment} />} />} />
+        <Route path="/return/summary" element={<ProtectedRoute element={<ReturnSummary returnEquipment={returnEquipment} setReturnEquipment={setReturnEquipment} />} />} />
+        <Route path="/borrow-return-history" element={<ProtectedRoute element={<UserBorrowReturnHistory />} />} />
+        <Route path="/room-booking" element={<ProtectedRoute element={<RoomBooking setBookingData={setBookingData} />} />} />
+        <Route path="/room-booking/availability" element={<ProtectedRoute element={<RoomAvailability setBookingData={setBookingData} />} />} />
+        <Route path="/room-booking/form" element={<ProtectedRoute element={bookingData ? <RoomBookingForm bookingData={bookingData} onConfirmBooking={(confirmData) => console.log('Booking confirmed:', confirmData)} /> : <Navigate to="/room-booking" />} />} />
+        <Route path="/room-booking/my-bookings" element={<ProtectedRoute element={<MyRoomBookings setReturnBookingData={setReturnBookingData} />} />} />
+        <Route path="/room-booking/return" element={<ProtectedRoute element={returnBookingData ? <ReturnRoomForm booking={returnBookingData} onConfirmReturn={(returnData) => console.log('Return confirmed:', returnData)} /> : <Navigate to="/room-booking/my-bookings" />} />} />
+        <Route path="/admin" element={<ProtectedRoute element={<AdminDashboard />} requiredRole="admin" />} />
+        <Route path="/admin/manage-rooms" element={<ProtectedRoute element={<AdminManageRooms />} requiredRole="admin" />} />
+        <Route path="/admin/room-schedule/:roomId" element={<ProtectedRoute element={<RoomSchedule />} requiredRole="admin" />} />
+        <Route path="/admin/manage-equipment" element={<ProtectedRoute element={<AdminManageEquipment />} requiredRole="admin" />} />
+        <Route path="/admin/borrow-return-history" element={<ProtectedRoute element={<BorrowReturnHistory />} requiredRole="admin" />} />
+        <Route path="/admin/room-booking-history" element={<ProtectedRoute element={<RoomBookingHistory />} requiredRole="admin" />} />
+        <Route path="/admin/management" element={<ProtectedRoute element={<AdminManagement />} requiredRole="admin" />} />
+        <Route path="/admin/history" element={<ProtectedRoute element={<AdminHistory />} requiredRole="admin" />} />
         <Route path="/" element={<Navigate to="/login" replace />} />
       </Routes>
     </Router>

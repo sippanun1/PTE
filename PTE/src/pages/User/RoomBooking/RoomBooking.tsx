@@ -1,8 +1,8 @@
 import { useNavigate } from "react-router-dom"
-import Header from "../../components/Header"
-import BookRoomButton from "../../components/BookRoomButton"
-import ListPopularRoom from "../../components/ListPopularRoom"
-import type { BookingData } from "../../App"
+import Header from "../../../components/Header"
+import BookRoomButton from "../../../components/BookRoomButton"
+import ListPopularRoom from "../../../components/ListPopularRoom"
+import type { BookingData } from "../../../App"
 
 interface Room {
   id: string

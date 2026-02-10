@@ -1,396 +1,480 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import Header from "../../components/Header"
-
-interface BorrowRecord {
-  id: string
-  borrowCode: string
-  quantity: number
-  equipmentName: string
-  equipmentType: "asset" | "consumable"
-  borrowDate: string
-  returnDate: string
-  status: "borrowed" | "returned"
-}
+import { collection, getDocs, query, orderBy } from "firebase/firestore"
+import { db } from "../../firebase/firebase"
+import type { BorrowTransaction } from "../../utils/borrowReturnLogger"
 
 export default function BorrowReturnHistory() {
   const navigate = useNavigate()
-  const [viewMode, setViewMode] = useState<"borrow" | "return" | "history">("borrow")
-  const [selectedType, setSelectedType] = useState<"asset" | "consumable">("asset")
+  const [transactions, setTransactions] = useState<BorrowTransaction[]>([])
+  const [loading, setLoading] = useState(true)
+  const [filter, setFilter] = useState<"all" | "scheduled" | "borrowed" | "returned" | "cancelled">("all")
+  const [searchTerm, setSearchTerm] = useState("")
+  const [borrowTypeFilter, setBorrowTypeFilter] = useState<"all" | "during-class" | "teaching" | "outside">("all")
+  const [dateFilter, setDateFilter] = useState<"all" | "today" | "week" | "month" | "custom">("all")
+  const [customStartDate, setCustomStartDate] = useState("")
+  const [customEndDate, setCustomEndDate] = useState("")
+  const [showFilters, setShowFilters] = useState(false)
 
-  const [borrowHistory] = useState<BorrowRecord[]>([
-    {
-      id: "1",
-      borrowCode: "A001",
-      quantity: 5,
-      equipmentName: "หนังสือสาย",
-      equipmentType: "asset",
-      borrowDate: "19/09/2025",
-      returnDate: "21/09/2025",
-      status: "returned"
-    },
-    {
-      id: "2",
-      borrowCode: "A002",
-      quantity: 3,
-      equipmentName: "คอมพิวเตอร์",
-      equipmentType: "asset",
-      borrowDate: "18/09/2025",
-      returnDate: "20/09/2025",
-      status: "borrowed"
-    },
-    {
-      id: "3",
-      borrowCode: "C001",
-      quantity: 10,
-      equipmentName: "กระดาษA4",
-      equipmentType: "consumable",
-      borrowDate: "17/09/2025",
-      returnDate: "19/09/2025",
-      status: "returned"
-    },
-    {
-      id: "4",
-      borrowCode: "C002",
-      quantity: 5,
-      equipmentName: "ปากกา",
-      equipmentType: "consumable",
-      borrowDate: "16/09/2025",
-      returnDate: "18/09/2025",
-      status: "borrowed"
-    },
-    {
-      id: "5",
-      borrowCode: "A003",
-      quantity: 2,
-      equipmentName: "โปรเจคเตอร์",
-      equipmentType: "asset",
-      borrowDate: "15/09/2025",
-      returnDate: "17/09/2025",
-      status: "returned"
+  useEffect(() => {
+    const fetchTransactions = async () => {
+      try {
+        setLoading(true)
+        const borrowHistoryQuery = query(
+          collection(db, "borrowHistory"),
+          orderBy("timestamp", "desc")
+        )
+        const snapshot = await getDocs(borrowHistoryQuery)
+        const txns = snapshot.docs.map((doc) => doc.data() as BorrowTransaction)
+        setTransactions(txns)
+      } catch (error) {
+        console.error("Error fetching borrow history:", error)
+      } finally {
+        setLoading(false)
+      }
     }
-  ])
 
-  const filteredHistory = borrowHistory.filter(record => record.equipmentType === selectedType)
+    fetchTransactions()
+  }, [])
+
+  // Date filter logic
+  const isWithinDateRange = (borrowDate: string) => {
+    if (dateFilter === 'all') return true
+    
+    // Parse borrowDate (format: DD/MM/YYYY or YYYY-MM-DD)
+    let txnDate: Date
+    if (borrowDate.includes('/')) {
+      const [day, month, year] = borrowDate.split('/')
+      txnDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day))
+    } else {
+      txnDate = new Date(borrowDate)
+    }
+    
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    
+    switch (dateFilter) {
+      case 'today':
+        const todayEnd = new Date(today)
+        todayEnd.setHours(23, 59, 59, 999)
+        return txnDate >= today && txnDate <= todayEnd
+      case 'week':
+        const weekAgo = new Date(today)
+        weekAgo.setDate(weekAgo.getDate() - 7)
+        return txnDate >= weekAgo
+      case 'month':
+        const monthAgo = new Date(today)
+        monthAgo.setMonth(monthAgo.getMonth() - 1)
+        return txnDate >= monthAgo
+      case 'custom':
+        if (!customStartDate && !customEndDate) return true
+        const start = customStartDate ? new Date(customStartDate) : new Date('1970-01-01')
+        const end = customEndDate ? new Date(customEndDate + 'T23:59:59') : new Date()
+        return txnDate >= start && txnDate <= end
+      default:
+        return true
+    }
+  }
+
+  // Check if any filter is active
+  const hasActiveFilters = filter !== 'all' || borrowTypeFilter !== 'all' || dateFilter !== 'all' || searchTerm !== ''
+
+  const clearFilters = () => {
+    setFilter('all')
+    setBorrowTypeFilter('all')
+    setDateFilter('all')
+    setSearchTerm('')
+    setCustomStartDate('')
+    setCustomEndDate('')
+  }
+
+  const filteredTransactions = transactions.filter((txn) => {
+    const matchesStatus = filter === "all" || txn.status === filter
+    const matchesBorrowType = borrowTypeFilter === "all" || txn.borrowType === borrowTypeFilter
+    const matchesSearch =
+      txn.userName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      txn.userEmail.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      txn.equipmentItems.some((item) =>
+        item.equipmentName.toLowerCase().includes(searchTerm.toLowerCase())
+      )
+    const matchesDate = isWithinDateRange(txn.borrowDate)
+    return matchesStatus && matchesBorrowType && matchesSearch && matchesDate
+  })
+
+  const getBorrowTypeText = (type: string) => {
+    switch (type) {
+      case "during-class":
+        return "ยืมในคาบเรียน"
+      case "teaching":
+        return "ยืมใช้สอน"
+      case "outside":
+        return "ยืมนอกคาบเรียน"
+      default:
+        return type
+    }
+  }
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "scheduled":
+        return "bg-blue-100 text-blue-800"
+      case "borrowed":
+        return "bg-yellow-100 text-yellow-800"
+      case "returned":
+        return "bg-green-100 text-green-800"
+      case "cancelled":
+        return "bg-red-100 text-red-800"
+      default:
+        return "bg-gray-100 text-gray-800"
+    }
+  }
+
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case "scheduled":
+        return "รอรับอุปกรณ์"
+      case "borrowed":
+        return "ยังไม่ได้คืน"
+      case "returned":
+        return "คืนแล้ว"
+      case "cancelled":
+        return "ยกเลิก"
+      default:
+        return status
+    }
+  }
 
   return (
-    <div className="min-h-screen bg-white">
+    <div
+      className="
+        min-h-screen
+        bg-white
+        bg-[radial-gradient(#dbeafe_1px,transparent_1px)]
+        bg-[length:18px_18px]
+      "
+    >
       {/* ===== HEADER ===== */}
-      <Header title="ประวัติการยืม/คืน" />
-
-      {/* ===== BACK BUTTON ===== */}
-      <div className="mt-8 px-4">
-        <div className="w-full max-w-4xl mx-auto mb-6">
-          <button
-            onClick={() => navigate(-1)}
-            className="px-6 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-full text-sm font-semibold transition"
-          >
-            ← ย้อนกลับ
-          </button>
-        </div>
-      </div>
+      <Header title="ประวัติการยืมและคืน" />
 
       {/* ===== CONTENT ===== */}
-      <div className="px-4">
-        <div className="w-full max-w-4xl mx-auto">
-          {/* View Mode Buttons */}
-          <div className="flex gap-4 mb-8 justify-center">
-                        <button
-              onClick={() => setViewMode("history")}
-              className={`
-                px-8 py-3 rounded-full text-base font-semibold transition
-                ${viewMode === "history"
-                  ? "bg-orange-500 text-white"
-                  : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-                }
-              `}
-            >
-              ประวัติ
-            </button>
-            <button
-              onClick={() => setViewMode("borrow")}
-              className={`
-                px-8 py-3 rounded-full text-base font-semibold transition
-                ${viewMode === "borrow"
-                  ? "bg-orange-500 text-white"
-                  : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-                }
-              `}
-            >
-              ยืม
-            </button>
-            <button
-              onClick={() => setViewMode("return")}
-              className={`
-                px-8 py-3 rounded-full text-base font-semibold transition
-                ${viewMode === "return"
-                  ? "bg-orange-500 text-white"
-                  : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-                }
-              `}
-            >
-              คืน
+      <div className="mt-6 flex justify-center">
+        <div className="w-full max-w-[360px] px-4 flex flex-col items-center pb-6">
+          {/* Back Button */}
+          <button
+            onClick={() => navigate(-1)}
+            className="
+              w-full
+              py-3
+              rounded-full
+              border border-gray-400
+              text-gray-600
+              text-sm font-medium
+              hover:bg-gray-100
+              transition
+              mb-6
+            "
+          >
+            ย้อนกลับ
+          </button>
+
+          {/* Search Bar */}
+          <div className="w-full mb-6 relative">
+            <input
+              type="text"
+              placeholder="ค้นหาชื่อ อีเมล หรืออุปกรณ์"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="
+                w-full
+                h-10
+                px-4
+                border border-gray-300
+                rounded-full
+                outline-none
+                text-sm
+              "
+            />
+            <button className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-600">
+              🔍
             </button>
           </div>
 
-          {/* Borrow View - Equipment being borrowed */}
-          {viewMode === "borrow" && (
-            <div className="overflow-x-auto bg-white rounded-lg shadow-sm border border-gray-200">
-              <table className="w-full">
-                <thead>
-                  <tr className="bg-gray-50 border-b border-gray-200">
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
-                      รหัสการยืม
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
-                      จำนวนยืม
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
-                      ชื่ออุปกรณ์
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
-                      ประเภท
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
-                      วันที่ยืม
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
-                      กำหนดคืน
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
-                      การดำเนิน
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {borrowHistory.filter(r => r.status === "borrowed").length > 0 ? (
-                    borrowHistory
-                      .filter(r => r.status === "borrowed")
-                      .map((record) => (
-                        <tr key={record.id} className="border-b border-gray-200 hover:bg-gray-50">
-                          <td className="px-6 py-4 text-sm text-gray-900">
-                            <div className="flex items-center gap-2">
-                              <span className="w-2 h-2 rounded-full bg-orange-500"></span>
-                              {record.borrowCode}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 text-sm text-gray-900">
-                            {record.quantity}
-                          </td>
-                          <td className="px-6 py-4 text-sm text-gray-900">
-                            {record.equipmentName}
-                          </td>
-                          <td className="px-6 py-4 text-sm text-gray-900">
-                            {record.equipmentType === "asset" ? "ครุภัณฑ์" : "วัสดุสิ้นเปลือง"}
-                          </td>
-                          <td className="px-6 py-4 text-sm text-gray-900">
-                            {record.borrowDate}
-                          </td>
-                          <td className="px-6 py-4 text-sm text-gray-900">
-                            {record.returnDate}
-                          </td>
-                          <td className="px-6 py-4 text-sm">
-                            <button className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded text-xs font-medium transition">
-                              บันทึกคืน
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                  ) : (
-                    <tr>
-                      <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
-                        ไม่มีอุปกรณ์ที่ยืมอยู่
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {/* Return View - Equipment that has been returned */}
-          {viewMode === "return" && (
-            <div className="overflow-x-auto bg-white rounded-lg shadow-sm border border-gray-200">
-              <table className="w-full">
-                <thead>
-                  <tr className="bg-gray-50 border-b border-gray-200">
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
-                      รหัสการยืม
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
-                      จำนวนยืม
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
-                      ชื่ออุปกรณ์
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
-                      ประเภท
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
-                      วันที่ยืม
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
-                      วันที่คืน
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
-                      การดำเนิน
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {borrowHistory.filter(r => r.status === "returned").length > 0 ? (
-                    borrowHistory
-                      .filter(r => r.status === "returned")
-                      .map((record) => (
-                        <tr key={record.id} className="border-b border-gray-200 hover:bg-gray-50">
-                          <td className="px-6 py-4 text-sm text-gray-900">
-                            <div className="flex items-center gap-2">
-                              <span className="w-2 h-2 rounded-full bg-green-500"></span>
-                              {record.borrowCode}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 text-sm text-gray-900">
-                            {record.quantity}
-                          </td>
-                          <td className="px-6 py-4 text-sm text-gray-900">
-                            {record.equipmentName}
-                          </td>
-                          <td className="px-6 py-4 text-sm text-gray-900">
-                            {record.equipmentType === "asset" ? "ครุภัณฑ์" : "วัสดุสิ้นเปลือง"}
-                          </td>
-                          <td className="px-6 py-4 text-sm text-gray-900">
-                            {record.borrowDate}
-                          </td>
-                          <td className="px-6 py-4 text-sm text-gray-900">
-                            {record.returnDate}
-                          </td>
-                          <td className="px-6 py-4 text-sm">
-                            <button className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded text-xs font-medium transition">
-                              ดูรายละเอียด
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                  ) : (
-                    <tr>
-                      <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
-                        ไม่มีอุปกรณ์ที่คืนแล้ว
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {/* History View - All borrow and return records */}
-          {viewMode === "history" && (
-            <>
-              {/* Equipment Type Filter Buttons */}
-              <div className="flex gap-4 mb-8 justify-center">
-                <button
-                  onClick={() => setSelectedType("asset")}
-                  className={`
-                    px-8 py-3 rounded-full text-base font-semibold transition
-                    ${selectedType === "asset"
-                      ? "bg-orange-500 text-white"
-                      : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-                    }
-                  `}
-                >
-                  ครุภัณฑ์
-                </button>
-                <button
-                  onClick={() => setSelectedType("consumable")}
-                  className={`
-                    px-8 py-3 rounded-full text-base font-semibold transition
-                    ${selectedType === "consumable"
-                      ? "bg-orange-500 text-white"
-                      : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-                    }
-                  `}
-                >
-                  วัสดุสิ้นเปลือง
-                </button>
+          {/* Collapsible Filter Section */}
+          <div className="w-full bg-gray-50 border border-gray-200 rounded-lg mb-6 overflow-hidden">
+            {/* Filter Header - Always Visible */}
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className="w-full px-4 py-3 flex justify-between items-center hover:bg-gray-100 transition"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold text-gray-700">🔧 ตัวกรอง</span>
+                {hasActiveFilters && (
+                  <span className="px-2 py-0.5 bg-blue-100 text-blue-600 text-xs rounded-full">
+                    กำลังใช้งาน
+                  </span>
+                )}
               </div>
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-gray-500">
+                  พบ <span className="font-semibold text-blue-600">{filteredTransactions.length}</span> รายการ
+                </span>
+                <span className={`text-gray-400 transition-transform ${showFilters ? 'rotate-180' : ''}`}>
+                  ▼
+                </span>
+              </div>
+            </button>
+            
+            {/* Collapsible Filter Content */}
+            {showFilters && (
+              <div className="px-4 pb-4 border-t border-gray-200">
+                {/* Status Filter */}
+                <div className="mt-4 mb-4">
+                  <p className="text-xs font-semibold text-gray-600 mb-2">สถานะ:</p>
+                  <div className="flex gap-2 flex-wrap">
+                    {[
+                      { key: 'all', label: 'ทั้งหมด', color: 'gray' },
+                      { key: 'scheduled', label: 'รอรับอุปกรณ์', color: 'blue' },
+                      { key: 'borrowed', label: 'ยังไม่ได้คืน', color: 'yellow' },
+                      { key: 'returned', label: 'คืนแล้ว', color: 'green' },
+                      { key: 'cancelled', label: 'ยกเลิก', color: 'red' }
+                    ].map((status) => (
+                      <button
+                        key={status.key}
+                        onClick={() => setFilter(status.key as typeof filter)}
+                        className={`px-3 py-1.5 rounded-full text-xs font-medium transition ${
+                          filter === status.key
+                            ? status.color === 'gray' ? "bg-gray-700 text-white"
+                            : status.color === 'blue' ? "bg-blue-500 text-white"
+                            : status.color === 'yellow' ? "bg-yellow-500 text-white"
+                            : status.color === 'green' ? "bg-green-500 text-white"
+                            : "bg-red-500 text-white"
+                            : "border border-gray-300 text-gray-700 hover:border-gray-500"
+                        }`}
+                      >
+                        {status.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
-              {/* History Table */}
-              <div className="overflow-x-auto bg-white rounded-lg shadow-sm border border-gray-200">
-                <table className="w-full">
-                  <thead>
-                    <tr className="bg-gray-50 border-b border-gray-200">
-                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
-                        รหัสการยืม
-                      </th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
-                        จำนวนยืม
-                      </th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
-                        ชื่ออุปกรณ์
-                      </th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
-                        วันที่ยืม
-                      </th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
-                        วันที่คืน
-                      </th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
-                        สถานะ
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredHistory.length > 0 ? (
-                      filteredHistory.map((record) => (
-                        <tr key={record.id} className="border-b border-gray-200 hover:bg-gray-50">
-                          <td className="px-6 py-4 text-sm text-gray-900">
-                            <div className="flex items-center gap-2">
-                              <span
-                                className={`w-2 h-2 rounded-full ${
-                                  record.status === "borrowed"
-                                    ? "bg-orange-500"
-                                    : "bg-green-500"
-                                }`}
-                              ></span>
-                              {record.borrowCode}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 text-sm text-gray-900">
-                            {record.quantity}
-                          </td>
-                          <td className="px-6 py-4 text-sm text-gray-900">
-                            {record.equipmentName}
-                          </td>
-                          <td className="px-6 py-4 text-sm text-gray-900">
-                            {record.borrowDate}
-                          </td>
-                          <td className="px-6 py-4 text-sm text-gray-900">
-                            {record.returnDate}
-                          </td>
-                          <td className="px-6 py-4 text-sm">
-                            <span
-                              className={`px-3 py-1 rounded-full text-xs font-medium ${
-                                record.status === "borrowed"
-                                  ? "bg-orange-100 text-orange-800"
-                                  : "bg-green-100 text-green-800"
-                              }`}
-                            >
-                              {record.status === "borrowed" ? "ยังจะคืน" : "คืนแล้ว"}
-                            </span>
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
-                          ไม่มีข้อมูลการยืม/คืน
-                        </td>
-                      </tr>
+                {/* Borrow Type Filter */}
+                <div className="mb-4">
+                  <p className="text-xs font-semibold text-gray-600 mb-2">ประเภทการยืม:</p>
+                  <div className="flex gap-2 flex-wrap">
+                    {[
+                      { key: 'all', label: 'ทั้งหมด' },
+                      { key: 'during-class', label: 'ยืมในคาบเรียน' },
+                      { key: 'teaching', label: 'ยืมใช้สอน' },
+                      { key: 'outside', label: 'ยืมนอกคาบเรียน' }
+                    ].map((type) => (
+                      <button
+                        key={type.key}
+                        onClick={() => setBorrowTypeFilter(type.key as typeof borrowTypeFilter)}
+                        className={`px-3 py-1.5 rounded-full text-xs font-medium transition ${
+                          borrowTypeFilter === type.key
+                            ? "bg-orange-500 text-white"
+                            : "border border-gray-300 text-gray-700 hover:border-orange-500"
+                        }`}
+                      >
+                        {type.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Date Filter */}
+                <div className="mb-4">
+                  <p className="text-xs font-semibold text-gray-600 mb-2">ช่วงเวลา:</p>
+                  <div className="flex gap-2 flex-wrap">
+                    {[
+                      { key: 'all', label: 'ทั้งหมด' },
+                      { key: 'today', label: 'วันนี้' },
+                      { key: 'week', label: '7 วันที่ผ่านมา' },
+                      { key: 'month', label: '30 วันที่ผ่านมา' },
+                      { key: 'custom', label: 'กำหนดเอง' }
+                    ].map((date) => (
+                      <button
+                        key={date.key}
+                        onClick={() => setDateFilter(date.key as typeof dateFilter)}
+                        className={`px-3 py-1.5 rounded-full text-xs font-medium transition ${
+                          dateFilter === date.key
+                            ? "bg-purple-500 text-white"
+                            : "border border-gray-300 text-gray-700 hover:border-purple-500"
+                        }`}
+                      >
+                        {date.label}
+                      </button>
+                    ))}
+                  </div>
+                  
+                  {/* Custom Date Range */}
+                  {dateFilter === 'custom' && (
+                    <div className="mt-3 flex gap-3 items-center flex-wrap">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-600">จาก:</span>
+                        <input
+                          type="date"
+                          value={customStartDate}
+                          onChange={(e) => setCustomStartDate(e.target.value)}
+                          className="px-2 py-1.5 border border-gray-300 rounded-lg text-xs focus:border-purple-500 outline-none"
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-600">ถึง:</span>
+                        <input
+                          type="date"
+                          value={customEndDate}
+                          onChange={(e) => setCustomEndDate(e.target.value)}
+                          className="px-2 py-1.5 border border-gray-300 rounded-lg text-xs focus:border-purple-500 outline-none"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Clear Filters Button */}
+                <div className="pt-3 border-t border-gray-200">
+                  <button
+                    onClick={clearFilters}
+                    className="text-xs text-gray-500 hover:text-red-500 transition flex items-center gap-1"
+                  >
+                    ✕ ล้างตัวกรองทั้งหมด
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Transactions List */}
+          {loading ? (
+            <div className="w-full text-center text-gray-500 py-8">
+              กำลังโหลด...
+            </div>
+          ) : filteredTransactions.length > 0 ? (
+            <div className="w-full flex flex-col gap-4">
+              {filteredTransactions.map((txn) => (
+                <div
+                  key={txn.borrowId}
+                  className="bg-gray-50 rounded-lg p-4 border border-gray-200"
+                >
+                  {/* Header: User and Status */}
+                  <div className="flex justify-between items-start mb-3">
+                    <div className="flex-1">
+                      <h3 className="text-sm font-semibold text-gray-800">
+                        {txn.userName}
+                      </h3>
+                      <p className="text-xs text-gray-600">{txn.userEmail}</p>
+                      {txn.userIdNumber && (
+                        <p className="text-xs text-gray-600">
+                          รหัส: {txn.userIdNumber}
+                        </p>
+                      )}
+                    </div>
+                    <span
+                      className={`
+                        px-3 py-1 rounded-full text-xs font-semibold
+                        ${getStatusColor(txn.status)}
+                      `}
+                    >
+                      {getStatusText(txn.status)}
+                    </span>
+                  </div>
+
+                  {/* Borrow Type */}
+                  <div className="mb-3 pb-3 border-b border-gray-300">
+                    <p className="text-xs text-gray-600 mb-1">ประเภทการยืม</p>
+                    <p className="text-sm font-medium text-orange-600">
+                      {getBorrowTypeText(txn.borrowType)}
+                    </p>
+                  </div>
+
+                  {/* Equipment Items */}
+                  <div className="mb-3 pb-3 border-b border-gray-300">
+                    <p className="text-xs text-gray-600 mb-2">อุปกรณ์</p>
+                    {txn.equipmentItems.map((item, idx) => (
+                      <div key={idx} className="text-xs mb-1 ml-2">
+                        <p className="text-gray-700">
+                          • {item.equipmentName}
+                          <span className="text-gray-600 ml-2">
+                            ({item.quantityBorrowed} ชิ้น)
+                          </span>
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Dates */}
+                  <div className="mb-3 pb-3 border-b border-gray-300">
+                    <div className="flex justify-between text-xs mb-2">
+                      <span className="text-gray-600">วันยืม:</span>
+                      <span className="text-gray-800 font-medium">
+                        {txn.borrowDate} {txn.borrowTime}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-xs mb-2">
+                      <span className="text-gray-600">กำหนดคืน:</span>
+                      <span className="text-gray-800 font-medium">
+                        {txn.expectedReturnDate}
+                      </span>
+                    </div>
+                    {txn.actualReturnDate && (
+                      <div className="flex justify-between text-xs">
+                        <span className="text-gray-600">วันคืนจริง:</span>
+                        <span className="text-gray-800 font-medium">
+                          {txn.actualReturnDate} {txn.returnTime}
+                        </span>
+                      </div>
                     )}
-                  </tbody>
-                </table>
-              </div>
-            </>
+                  </div>
+
+                  {/* Condition */}
+                  <div className="mb-3 pb-3 border-b border-gray-300">
+                    <p className="text-xs text-gray-600 mb-1">สภาพยืม</p>
+                    <p className="text-xs text-gray-800">
+                      {txn.conditionBeforeBorrow}
+                    </p>
+                    {txn.conditionOnReturn && (
+                      <>
+                        <p className="text-xs text-gray-600 mt-2 mb-1">
+                          สภาพคืน
+                        </p>
+                        <p className="text-xs text-gray-800">
+                          {txn.conditionOnReturn}
+                        </p>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Damages if any */}
+                  {txn.damagesAndIssues && (
+                    <div className="mb-3 pb-3 border-b border-red-300 bg-red-50 p-2 rounded">
+                      <p className="text-xs text-red-600 mb-1 font-semibold">
+                        ⚠️ ปัญหาและความเสียหาย
+                      </p>
+                      <p className="text-xs text-red-800">
+                        {txn.damagesAndIssues}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Return Info */}
+                  {txn.returnedBy && (
+                    <div className="text-xs text-gray-600">
+                      <p>
+                        คืนโดย: <span className="font-medium">{txn.returnedBy}</span>
+                      </p>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="w-full text-center text-gray-500 py-8">
+              {searchTerm || filter !== "all"
+                ? "ไม่พบข้อมูลการยืมและคืน"
+                : "ยังไม่มีข้อมูลการยืมและคืน"}
+            </div>
           )}
         </div>
       </div>

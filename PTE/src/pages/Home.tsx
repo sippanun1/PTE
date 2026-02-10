@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
+import { signOut } from "firebase/auth"
+import { auth } from "../firebase/firebase"
 import Header from "../components/Header"
 
 export default function Home() {
@@ -28,6 +30,15 @@ export default function Home() {
     const interval = setInterval(updateDateTime, 1000)
     return () => clearInterval(interval)
   }, [])
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth)
+      navigate('/login')
+    } catch (error) {
+      console.error('Error logging out:', error)
+    }
+  }
 
   return (
     <div
@@ -114,6 +125,34 @@ export default function Home() {
               "
             >
               ยืมใช้ห้อง
+            </button>
+
+            <button
+              onClick={() => navigate('/borrow-return-history')}
+              className="
+                w-full h-12
+                rounded-full
+                bg-blue-500
+                text-white text-base font-medium
+                hover:bg-blue-600
+                transition
+              "
+            >
+              ประวัติการยืมและคืน
+            </button>
+
+            <button
+              onClick={handleLogout}
+              className="
+                w-full h-12
+                rounded-full
+                bg-red-500
+                text-white text-base font-medium
+                hover:bg-red-600
+                transition
+              "
+            >
+              ออกจากระบบ
             </button>
 
           </div>

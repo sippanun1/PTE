@@ -1,5 +1,5 @@
-import Header from "../../components/Header"
-import UserInfoBox from "../../components/UserInfoBox"
+import Header from "../../../components/Header"
+import UserInfoBox from "../../../components/UserInfoBox"
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 

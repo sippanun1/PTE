@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
-import { equipmentData, categories, welldingTypes, machineTypes } from "../../data/equipment"
-import shoppingCartIcon from "../../assets/shoppingcart.svg"
-import type { SelectedEquipment } from "../../App"
+import { equipmentData, categories, welldingTypes, machineTypes } from "../../../data/equipment"
+import shoppingCartIcon from "../../../assets/shoppingcart.svg"
+import type { SelectedEquipment } from "../../../App"
 
 interface EquipmentSelectionProps {
   cartItems?: SelectedEquipment[]

@@ -1,13 +1,13 @@
 import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
-import Header from "../../components/Header"
+import Header from "../../../components/Header"
 
-export default function BorrowDuringClass() {
+export default function BorrowForTeaching() {
   const navigate = useNavigate()
   const [currentDate, setCurrentDate] = useState<string>("")
   const [currentTime, setCurrentTime] = useState<string>("")
+  const [recipient, setRecipient] = useState<string>("")
   const [selectedDate, setSelectedDate] = useState<string>("20/12/2568")
-  const [selectedTime, setSelectedTime] = useState<"morning" | "afternoon" | null>(null)
   const [showCalendar, setShowCalendar] = useState(false)
   const [currentMonth, setCurrentMonth] = useState(new Date(2025, 5))
 
@@ -64,10 +64,10 @@ export default function BorrowDuringClass() {
   }
 
   const handleConfirm = () => {
-    if (selectedTime && selectedDate) {
+    if (recipient && selectedDate) {
       console.log({
-        date: selectedDate,
-        time: selectedTime === "morning" ? "(09.30-10.30)" : "(13.30-14.30)"
+        recipient: recipient,
+        date: selectedDate
       })
       navigate('/borrow/equipment')
     }
@@ -83,7 +83,7 @@ export default function BorrowDuringClass() {
       "
     >
       {/* ===== HEADER ===== */}
-      <Header title="ยืมในคาบเรียน" />
+      <Header title="ยืมใช้สอน" />
 
       {/* ===== CONTENT ===== */}
       <div className="mt-8 flex justify-center">
@@ -97,49 +97,24 @@ export default function BorrowDuringClass() {
             </div>
           </div>
 
-          {/* Time Selection */}
+          {/* Recipient Input */}
           <div className="w-full mb-6">
-            <div className="text-sm text-gray-600 mb-2">รอบ</div>
-            <div className="flex gap-2 mb-3">
-              <button
-                onClick={() => setSelectedTime("morning")}
-                className={`
-                  flex-1 h-9
-                  rounded-full
-                  border-2
-                  text-sm font-medium
-                  transition
-                  ${
-                    selectedTime === "morning"
-                      ? "border-orange-500 bg-orange-50 text-orange-600"
-                      : "border-gray-400 text-gray-600 hover:border-gray-500"
-                  }
-                `}
-              >
-                รอบเช้า
-              </button>
-              <button
-                onClick={() => setSelectedTime("afternoon")}
-                className={`
-                  flex-1 h-9
-                  rounded-full
-                  border-2
-                  text-sm font-medium
-                  transition
-                  ${
-                    selectedTime === "afternoon"
-                      ? "border-orange-500 bg-orange-50 text-orange-600"
-                      : "border-gray-400 text-gray-600 hover:border-gray-500"
-                  }
-                `}
-              >
-                รอบบ่าย
-              </button>
-            </div>
-            <div className="text-xs text-gray-500">
-              {selectedTime === "morning" && "(09.30-10.30)"}
-              {selectedTime === "afternoon" && "(13.30-14.30)"}
-            </div>
+            <div className="text-sm text-gray-600 mb-2">ระบุรายวิชา</div>
+            <input
+              type="text"
+              value={recipient}
+              onChange={(e) => setRecipient(e.target.value)}
+              placeholder="วิชา..............."
+              className="
+                w-full h-11
+                px-5
+                rounded-full
+                border border-gray-400
+                outline-none
+                text-sm
+                placeholder-gray-400
+              "
+            />
           </div>
 
           {/* Date Selection */}
@@ -246,7 +221,7 @@ export default function BorrowDuringClass() {
             </button>
             <button
               onClick={handleConfirm}
-              disabled={!selectedTime}
+              disabled={!recipient}
               className={`
                 flex-1 h-11
                 rounded-full
@@ -254,7 +229,7 @@ export default function BorrowDuringClass() {
                 text-white
                 transition
                 ${
-                  selectedTime
+                  recipient
                     ? "bg-orange-500 hover:bg-orange-600"
                     : "bg-gray-300 cursor-not-allowed"
                 }

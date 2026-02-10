@@ -1,12 +1,18 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, writeBatch } from "firebase/firestore"
+import { db } from "../../firebase/firebase"
 import Header from "../../components/Header"
+import { useAuth } from "../../hooks/useAuth"
+import { logAdminAction } from "../../utils/adminLogger"
 
 interface Equipment {
   id: string
   name: string
   category: "consumable" | "asset" | "main"
   quantity: number
+  unit: string
+  picture?: string 
 }
 
 interface AddStockForm {
@@ -26,17 +32,54 @@ interface AddEquipmentForm {
   nameThai: string
   nameEnglish: string
   quantity: string
+  unit: string
   notes: string
+  picture?: string
+}
+
+interface EditEquipmentForm {
+  id: string
+  nameThai: string
+  nameEnglish: string
+  quantity: string
+  unit: string
+  picture?: string
 }
 
 export default function AdminManageEquipment() {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedCategory, setSelectedCategory] = useState<"all" | "consumable" | "asset" | "main">("all")
   const [showAddStockModal, setShowAddStockModal] = useState(false)
   const [showAddEquipmentModal, setShowAddEquipmentModal] = useState(false)
   const [showSuccessModal, setShowSuccessModal] = useState(false)
   const [successMessage, setSuccessMessage] = useState("")
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false)
+  const [showEditConfirmModal, setShowEditConfirmModal] = useState(false)
+  const [showAddStockConfirmModal, setShowAddStockConfirmModal] = useState(false)
+  const [showAssetEditModal, setShowAssetEditModal] = useState(false)
+  const [assetIdsForItem, setAssetIdsForItem] = useState<string[]>([])
+  const [selectedAssetIdToDelete, setSelectedAssetIdToDelete] = useState("")
+  const [selectedEquipmentId, setSelectedEquipmentId] = useState("")
+  const [assetEditNameThai, setAssetEditNameThai] = useState("")
+  const [assetEditNameEnglish, setAssetEditNameEnglish] = useState("")
+  const [assetEditCodesMarkedForDelete, setAssetEditCodesMarkedForDelete] = useState<string[]>([])
+  const [assetEditPicture, setAssetEditPicture] = useState<string | undefined>(undefined)
+  const [showAssetCodeDeleteConfirm, setShowAssetCodeDeleteConfirm] = useState(false)
+  const [assetCodeToDelete, setAssetCodeToDelete] = useState("")
+  const [showAssetDeleteAllConfirm, setShowAssetDeleteAllConfirm] = useState(false)
+  const [editingCodeId, setEditingCodeId] = useState<string | null>(null)
+  const [editingCodeValue, setEditingCodeValue] = useState("")
+  const [assetCodeSearchTerm, setAssetCodeSearchTerm] = useState("")
+  const [editForm, setEditForm] = useState<EditEquipmentForm>({
+    id: "",
+    nameThai: "",
+    nameEnglish: "",
+    quantity: "",
+    unit: "ชิ้น"
+  })
   const [addStockForm, setAddStockForm] = useState<AddStockForm>({
     equipmentId: "",
     equipmentName: "",
@@ -53,13 +96,38 @@ export default function AdminManageEquipment() {
     nameThai: "",
     nameEnglish: "",
     quantity: "",
-    notes: ""
+    unit: "ชิ้น",
+    notes: "",
+    picture: undefined
   })
-  const [equipment, setEquipment] = useState<Equipment[]>([
-    { id: "1", name: "สวดเดื่อม3.2", category: "consumable", quantity: 7 },
-    { id: "2", name: "สวดเดื่อม2.6", category: "asset", quantity: 2 },
-    { id: "3", name: "อุปกรณ์อื่น", category: "main", quantity: 5 }
-  ])
+  const [equipment, setEquipment] = useState<Equipment[]>([])
+  const [loading, setLoading] = useState(true)
+
+  // Load equipment from Firestore on mount
+  useEffect(() => {
+    const loadEquipment = async () => {
+      try {
+        const querySnapshot = await getDocs(collection(db, "equipment"))
+        const equipmentList: Equipment[] = []
+        querySnapshot.forEach((doc) => {
+          equipmentList.push({
+            id: doc.data().id || doc.id,
+            name: doc.data().name,
+            category: doc.data().category,
+            quantity: doc.data().quantity,
+            unit: doc.data().unit || "ชิ้น",
+            picture: doc.data().picture
+          })
+        })
+        setEquipment(equipmentList)
+      } catch (error) {
+        console.error("Error loading equipment:", error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    loadEquipment()
+  }, [])
 
   const categories = [
     { key: "all", label: "ทั้งหมด" },
@@ -67,7 +135,34 @@ export default function AdminManageEquipment() {
     { key: "asset", label: "ครุภัณฑ์" },
   ] as const
 
-  const filteredEquipment = equipment.filter((item) => {
+  // Group equipment by name for assets, keep consumables separate
+  const getGroupedEquipment = () => {
+    const grouped: { [key: string]: Equipment[] } = {}
+    
+    equipment.forEach((item) => {
+      if (!grouped[item.name]) {
+        grouped[item.name] = []
+      }
+      grouped[item.name].push(item)
+    })
+    
+    return Object.entries(grouped).map(([_name, items]) => {
+      if (items[0].category === "asset") {
+        // For assets, show as one item with total quantity
+        return {
+          ...items[0],
+          quantity: items.length,
+          allIds: items.map(i => i.id)
+        }
+      }
+      // For consumables, return each separately
+      return items.length === 1 ? { ...items[0], allIds: [items[0].id] } : { ...items[0], allIds: items.map(i => i.id) }
+    }).flat()
+  }
+
+  const groupedEquipment = getGroupedEquipment()
+
+  const filteredEquipment = groupedEquipment.filter((item: any) => {
     const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase())
     const matchesCategory = selectedCategory === "all" || item.category === selectedCategory
     return matchesSearch && matchesCategory
@@ -80,12 +175,26 @@ export default function AdminManageEquipment() {
       nameThai: "",
       nameEnglish: "",
       quantity: "",
-      notes: ""
+      unit: "ชิ้น",
+      notes: "",
+      picture: undefined
     })
     setShowAddEquipmentModal(true)
   }
 
-  const handleAddEquipmentSubmit = () => {
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      const reader = new FileReader()
+      reader.onload = (event) => {
+        const base64String = event.target?.result as string
+        setAddEquipmentForm({ ...addEquipmentForm, picture: base64String })
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const handleAddEquipmentSubmit = async () => {
     const isAsset = addEquipmentForm.category === "asset"
     const quantityNum = parseInt(addEquipmentForm.quantity) || 0
     
@@ -102,35 +211,362 @@ export default function AdminManageEquipment() {
     }
     
     if (addEquipmentForm.nameThai && addEquipmentForm.quantity) {
-      if (isAsset) {
-        // Create separate equipment record for each ID
-        const newEquipments: Equipment[] = addEquipmentForm.ids.map((id) => ({
-          id: id,
-          name: `${addEquipmentForm.nameThai}${addEquipmentForm.nameEnglish ? ` (${addEquipmentForm.nameEnglish})` : ""}`,
-          category: addEquipmentForm.category,
-          quantity: 1
-        }))
-        setEquipment([...equipment, ...newEquipments])
-      } else {
-        // For consumables, create single record
-        const newEquipment: Equipment = {
-          id: `${addEquipmentForm.category}-${Date.now()}`,
-          name: `${addEquipmentForm.nameThai}${addEquipmentForm.nameEnglish ? ` (${addEquipmentForm.nameEnglish})` : ""}`,
-          category: addEquipmentForm.category,
-          quantity: parseInt(addEquipmentForm.quantity)
+      try {
+        if (isAsset) {
+          // Create separate equipment record for each ID
+          const newEquipments: Equipment[] = addEquipmentForm.ids.map((id) => ({
+            id: id,
+            name: `${addEquipmentForm.nameThai}${addEquipmentForm.nameEnglish ? ` (${addEquipmentForm.nameEnglish})` : ""}`,
+            category: addEquipmentForm.category,
+            quantity: 1,
+            unit: addEquipmentForm.unit,
+            picture: addEquipmentForm.picture
+          }))
+          
+          // Save each to Firestore
+          for (const equip of newEquipments) {
+            await addDoc(collection(db, "equipment"), equip)
+          }
+          
+          setEquipment([...equipment, ...newEquipments])
+        } else {
+          // For consumables, create single record
+          const newEquipment: Equipment = {
+            id: `${addEquipmentForm.category}-${Date.now()}`,
+            name: `${addEquipmentForm.nameThai}${addEquipmentForm.nameEnglish ? ` (${addEquipmentForm.nameEnglish})` : ""}`,
+            category: addEquipmentForm.category,
+            quantity: parseInt(addEquipmentForm.quantity),
+            unit: addEquipmentForm.unit,
+            picture: addEquipmentForm.picture
+          }
+          
+          // Save to Firestore
+          await addDoc(collection(db, "equipment"), newEquipment)
+          
+          setEquipment([...equipment, newEquipment])
         }
-        setEquipment([...equipment, newEquipment])
+        
+        // Log admin action
+        if (user) {
+          logAdminAction({
+            user,
+            action: 'add',
+            type: 'equipment',
+            itemName: addEquipmentForm.nameThai,
+            details: `Category: ${addEquipmentForm.category === 'consumable' ? 'วัสดุสิ้นเปลือง' : 'ครุภัณฑ์'}, Quantity: ${addEquipmentForm.quantity}, English: ${addEquipmentForm.nameEnglish || 'N/A'}`
+          })
+        }
+        
+        setShowAddEquipmentModal(false)
+        setSuccessMessage("เพิ่มอุปกรณ์ใหม่สำเร็จ!")
+        setShowSuccessModal(true)
+      } catch (error) {
+        console.error("Error adding equipment:", error)
+        alert("เกิดข้อผิดพลาดในการบันทึกข้อมูล")
       }
-      
-      setShowAddEquipmentModal(false)
-      setSuccessMessage("เพิ่มอุปกรณ์ใหม่สำเร็จ!")
-      setShowSuccessModal(true)
     }
   }
 
-  const handleIssue = (equipmentId: string) => {
-    // TODO: Handle equipment issue
-    console.log("Issue equipment:", equipmentId)
+  const handleIssue = (equipmentName: string, itemAllIds: any) => {
+    const isAsset = equipment.find(e => e.name === equipmentName)?.category === "asset"
+    
+    // If asset with multiple IDs, show asset edit modal
+    if (isAsset && itemAllIds.length > 1) {
+      setAssetIdsForItem(itemAllIds)
+      setSelectedEquipmentId(equipmentName)
+      
+      // Extract Thai and English names
+      const nameParts = equipmentName.split(" (")
+      const nameThai = nameParts[0]
+      const nameEnglish = nameParts[1] ? nameParts[1].replace(")", "") : ""
+      
+      // Get picture from first item with this name
+      const firstItem = equipment.find(e => e.name === equipmentName)
+      setAssetEditPicture(firstItem?.picture)
+      
+      setAssetEditNameThai(nameThai)
+      setAssetEditNameEnglish(nameEnglish)
+      setAssetEditCodesMarkedForDelete([])
+      setShowAssetEditModal(true)
+      return
+    }
+    
+    // For single item or consumable, proceed normally
+    const item = equipment.find(e => e.name === equipmentName)
+    if (item) {
+      const nameParts = item.name.split(" (")
+      const nameThai = nameParts[0]
+      const nameEnglish = nameParts[1] ? nameParts[1].replace(")", "") : ""
+
+      setSelectedEquipmentId(item.id)
+      setEditForm({
+        id: item.id,
+        nameThai: nameThai,
+        nameEnglish: nameEnglish,
+        quantity: item.quantity.toString(),
+        unit: item.unit || "ชิ้น",
+        picture: item.picture
+      })
+      setShowEditModal(true)
+    }
+  }
+
+  const handleEditSubmit = () => {
+    setShowEditModal(false)
+    setShowEditConfirmModal(true)
+  }
+
+  const handleEditConfirm = async () => {
+    const fullName = editForm.nameEnglish ? `${editForm.nameThai} (${editForm.nameEnglish})` : editForm.nameThai
+    
+    try {
+      // Find and update in Firestore
+      const querySnapshot = await getDocs(collection(db, "equipment"))
+      for (const docSnap of querySnapshot.docs) {
+        if (docSnap.data().id === editForm.id) {
+          await updateDoc(doc(db, "equipment", docSnap.id), {
+            name: fullName,
+            quantity: parseInt(editForm.quantity) || 0,
+            unit: editForm.unit,
+            picture: editForm.picture
+          })
+          break
+        }
+      }
+      
+      setEquipment(equipment.map(item =>
+        item.id === editForm.id
+          ? { ...item, name: fullName, quantity: parseInt(editForm.quantity) || 0, unit: editForm.unit, picture: editForm.picture }
+          : item
+      ))
+      
+      // Log admin action
+      if (user) {
+        logAdminAction({
+          user,
+          action: 'edit',
+          type: 'equipment',
+          itemName: editForm.nameThai,
+          details: `Updated quantity to: ${editForm.quantity}, English name: ${editForm.nameEnglish || 'N/A'}`
+        })
+      }
+      
+      setShowEditConfirmModal(false)
+      setSuccessMessage("แก้ไขอุปกรณ์สำเร็จ!")
+      setShowSuccessModal(true)
+    } catch (error) {
+      console.error("Error updating equipment:", error)
+      alert("เกิดข้อผิดพลาดในการบันทึกข้อมูล")
+    }
+  }
+
+  const handleDeleteClick = () => {
+    setShowEditModal(false)
+    setShowDeleteConfirmModal(true)
+  }
+
+  const handleAssetEditCodeDelete = (codeId: string) => {
+    setAssetCodeToDelete(codeId)
+    setShowAssetCodeDeleteConfirm(true)
+  }
+
+  const handleAssetCodeDeleteConfirm = async () => {
+    try {
+      // Delete from Firestore
+      const querySnapshot = await getDocs(collection(db, "equipment"))
+      for (const docSnap of querySnapshot.docs) {
+        if (docSnap.data().id === assetCodeToDelete) {
+          await deleteDoc(doc(db, "equipment", docSnap.id))
+          break
+        }
+      }
+      
+      // Delete single code
+      const updatedEquipment = equipment.filter(item => item.id !== assetCodeToDelete)
+      setEquipment(updatedEquipment)
+      
+      // Update assetIdsForItem
+      const updatedIds = assetIdsForItem.filter(id => id !== assetCodeToDelete)
+      setAssetIdsForItem(updatedIds)
+
+      // Log admin action
+      if (user) {
+        logAdminAction({
+          user,
+          action: 'delete',
+          type: 'equipment',
+          itemName: assetEditNameThai,
+          details: `Deleted asset code: ${assetCodeToDelete}`
+        })
+      }
+
+      setShowAssetCodeDeleteConfirm(false)
+      setAssetCodeToDelete("")
+      
+      // If no more codes left, close the modal
+      if (updatedIds.length === 0) {
+        setShowAssetEditModal(false)
+        setAssetEditPicture(undefined)
+        setAssetCodeSearchTerm("")
+        setSuccessMessage("ลบรหัสอุปกรณ์สำเร็จ!")
+        setShowSuccessModal(true)
+      }
+    } catch (error) {
+      console.error("Error deleting equipment:", error)
+      alert("เกิดข้อผิดพลาดในการลบข้อมูล")
+    }
+  }
+
+  const handleAssetDeleteAll = () => {
+    setShowAssetDeleteAllConfirm(true)
+  }
+
+  const handleAssetDeleteAllConfirm = async () => {
+    try {
+      // Delete all from Firestore
+      const querySnapshot = await getDocs(collection(db, "equipment"))
+      const batch = writeBatch(db)
+      for (const docSnap of querySnapshot.docs) {
+        if (assetIdsForItem.includes(docSnap.data().id)) {
+          batch.delete(doc(db, "equipment", docSnap.id))
+        }
+      }
+      await batch.commit()
+      
+      // Delete all codes for this asset
+      const updatedEquipment = equipment.filter(item => !assetIdsForItem.includes(item.id))
+      setEquipment(updatedEquipment)
+
+      // Log admin action
+      if (user) {
+        logAdminAction({
+          user,
+          action: 'delete',
+          type: 'equipment',
+          itemName: assetEditNameThai,
+          details: `Deleted all ${assetIdsForItem.length} asset code(s): ${assetIdsForItem.join(", ")}`
+        })
+      }
+
+      setShowAssetDeleteAllConfirm(false)
+      setShowAssetEditModal(false)
+      setAssetEditCodesMarkedForDelete([])
+      setAssetCodeSearchTerm("")
+      setEditingCodeId(null)
+      setEditingCodeValue("")
+      setAssetEditPicture(undefined)
+      setSuccessMessage(`ลบครุภัณฑ์ ${assetEditNameThai} สำเร็จ!`)
+      setShowSuccessModal(true)
+    } catch (error) {
+      console.error("Error deleting all equipment:", error)
+      alert("เกิดข้อผิดพลาดในการลบข้อมูล")
+    }
+  }
+
+  const handleAssetEditConfirm = async () => {
+    // Build new name
+    const newFullName = assetEditNameEnglish 
+      ? `${assetEditNameThai} (${assetEditNameEnglish})` 
+      : assetEditNameThai
+    
+    try {
+      // Update in Firestore
+      const querySnapshot = await getDocs(collection(db, "equipment"))
+      const batch = writeBatch(db)
+      for (const docSnap of querySnapshot.docs) {
+        if (docSnap.data().name === selectedEquipmentId) {
+          batch.update(doc(db, "equipment", docSnap.id), {
+            name: newFullName,
+            picture: assetEditPicture
+          })
+        }
+      }
+      await batch.commit()
+      
+      // Update name and picture for all assets with same name
+      const updatedEquipment = equipment.map(item => {
+        if (item.name === selectedEquipmentId) {
+          return { ...item, name: newFullName, picture: assetEditPicture }
+        }
+        return item
+      })
+      
+      setEquipment(updatedEquipment)
+
+      // Log admin action if name changed
+      if (user && newFullName !== selectedEquipmentId) {
+        logAdminAction({
+          user,
+          action: 'edit',
+          type: 'equipment',
+          itemName: assetEditNameThai,
+          details: `Changed name from "${selectedEquipmentId}" to "${newFullName}"`
+        })
+      }
+
+      setShowAssetEditModal(false)
+      setAssetEditCodesMarkedForDelete([])
+      setAssetCodeSearchTerm("")
+      setEditingCodeId(null)
+      setEditingCodeValue("")
+      setAssetEditPicture(undefined)
+      setSuccessMessage("บันทึกการเปลี่ยนแปลงสำเร็จ!")
+      setShowSuccessModal(true)
+    } catch (error) {
+      console.error("Error updating equipment:", error)
+      alert("เกิดข้อผิดพลาดในการบันทึกข้อมูล")
+    }
+  }
+
+  const handleAssetEditCancel = () => {
+    setShowAssetEditModal(false)
+    setAssetEditCodesMarkedForDelete([])
+    setAssetCodeSearchTerm("")
+    setEditingCodeId(null)
+    setEditingCodeValue("")
+    setAssetEditPicture(undefined)
+  }
+
+  const handleAddStockSubmitClick = () => {
+    setShowAddStockModal(false)
+    setShowAddStockConfirmModal(true)
+  }
+
+  const handleDeleteConfirm = async () => {
+    const deletedEquipment = equipment.find(item => item.id === selectedAssetIdToDelete || item.id === selectedEquipmentId)
+    const idToDelete = selectedAssetIdToDelete || selectedEquipmentId
+    
+    try {
+      // Delete from Firestore
+      const querySnapshot = await getDocs(collection(db, "equipment"))
+      for (const docSnap of querySnapshot.docs) {
+        if (docSnap.data().id === idToDelete) {
+          await deleteDoc(doc(db, "equipment", docSnap.id))
+          break
+        }
+      }
+      
+      setEquipment(equipment.filter(item => item.id !== idToDelete))
+      
+      // Log admin action
+      if (user && deletedEquipment) {
+        logAdminAction({
+          user,
+          action: 'delete',
+          type: 'equipment',
+          itemName: deletedEquipment.name,
+          details: `Category: ${deletedEquipment.category === 'consumable' ? 'วัสดุสิ้นเปลือง' : 'ครุภัณฑ์'}, ID: ${idToDelete}, Quantity was: ${deletedEquipment.quantity}`
+        })
+      }
+      
+      setShowDeleteConfirmModal(false)
+      setSelectedAssetIdToDelete("")
+      setSuccessMessage("ลบอุปกรณ์สำเร็จ!")
+      setShowSuccessModal(true)
+    } catch (error) {
+      console.error("Error deleting equipment:", error)
+      alert("เกิดข้อผิดพลาดในการลบข้อมูล")
+    }
   }
 
   const handleAdd = (equipmentId: string) => {
@@ -166,31 +602,67 @@ export default function AdminManageEquipment() {
         alert("รหัสอุปกรณ์ต้องไม่ซ้ำกัน")
         return
       }
-      
-      // Add each asset as a separate equipment record
-      const newEquipments: Equipment[] = addStockForm.assetIds.map((id) => ({
-        id: id,
-        name: addStockForm.equipmentName,
-        category: addStockForm.equipmentCategory,
-        quantity: 1
-      }))
-      setEquipment([...equipment, ...newEquipments])
     } else {
-      // For consumables, just add to quantity
-      if (addStockForm.quantity && addStockForm.date) {
+      // For consumables, check required fields
+      if (!addStockForm.quantity || !addStockForm.date) {
+        alert("กรุณากรอกจำนวนและวันที่รับเข้า")
+        return
+      }
+    }
+    
+    handleAddStockSubmitClick()
+  }
+
+  const handleAddStockConfirm = async () => {
+    const isAsset = addStockForm.equipmentCategory === "asset"
+    const existingUnit = equipment.find(e => e.name === addStockForm.equipmentName)?.unit || "ชิ้น"
+    
+    try {
+      if (isAsset) {
+        // Add each asset as a separate equipment record
+        const newEquipments: Equipment[] = addStockForm.assetIds.map((id) => ({
+          id: id,
+          name: addStockForm.equipmentName,
+          category: addStockForm.equipmentCategory,
+          quantity: 1,
+          unit: existingUnit
+        }))
+        
+        // Save each to Firestore
+        for (const equip of newEquipments) {
+          await addDoc(collection(db, "equipment"), equip)
+        }
+        
+        setEquipment([...equipment, ...newEquipments])
+      } else {
+        // For consumables, just add to quantity
+        const newQuantity = (equipment.find(item => item.id === addStockForm.equipmentId)?.quantity || 0) + parseInt(addStockForm.quantity)
+        
+        // Update in Firestore
+        const querySnapshot = await getDocs(collection(db, "equipment"))
+        for (const docSnap of querySnapshot.docs) {
+          if (docSnap.data().id === addStockForm.equipmentId) {
+            await updateDoc(doc(db, "equipment", docSnap.id), {
+              quantity: newQuantity
+            })
+            break
+          }
+        }
+        
         setEquipment(equipment.map(item =>
           item.id === addStockForm.equipmentId
             ? { ...item, quantity: item.quantity + parseInt(addStockForm.quantity) }
             : item
         ))
-      } else {
-        return
       }
+      
+      setShowAddStockConfirmModal(false)
+      setSuccessMessage("เพิ่มสต๊อกสำเร็จ!")
+      setShowSuccessModal(true)
+    } catch (error) {
+      console.error("Error adding stock:", error)
+      alert("เกิดข้อผิดพลาดในการบันทึกข้อมูล")
     }
-    
-    setShowAddStockModal(false)
-    setSuccessMessage("เพิ่มสต๊อกสำเร็จ!")
-    setShowSuccessModal(true)
   }
 
   return (
@@ -286,10 +758,14 @@ export default function AdminManageEquipment() {
 
           {/* Equipment List */}
           <div className="w-full flex flex-col gap-4">
-            {filteredEquipment.length > 0 ? (
-              filteredEquipment.map((item) => (
+            {loading ? (
+              <div className="text-center py-8">
+                <p className="text-gray-500">กำลังโหลดข้อมูล...</p>
+              </div>
+            ) : filteredEquipment.length > 0 ? (
+              filteredEquipment.map((item: any) => (
                 <div
-                  key={item.id}
+                  key={item.name}
                   className="
                     bg-orange-50
                     rounded-lg
@@ -297,6 +773,17 @@ export default function AdminManageEquipment() {
                     border border-orange-200
                   "
                 >
+                  {/* Equipment Picture */}
+                  {item.picture && (
+                    <div className="mb-3 rounded-lg overflow-hidden">
+                      <img
+                        src={item.picture}
+                        alt={item.name}
+                        className="w-full h-32 object-cover"
+                      />
+                    </div>
+                  )}
+
                   {/* Equipment Name */}
                   <h3 className="text-sm font-semibold text-gray-800 mb-2">
                     {item.name}
@@ -304,13 +791,13 @@ export default function AdminManageEquipment() {
 
                   {/* Quantity */}
                   <p className="text-xs text-gray-600 mb-3">
-                    จำนวนอุปกรณ์ {item.quantity} ชิ้น
+                    จำนวนอุปกรณ์ {item.quantity} {item.unit || "ชิ้น"}
                   </p>
 
                   {/* Action Buttons */}
                   <div className="flex gap-2">
                     <button
-                      onClick={() => handleIssue(item.id)}
+                      onClick={() => handleIssue(item.name, item.allIds)}
                       className="
                         flex-1
                         py-2
@@ -353,7 +840,7 @@ export default function AdminManageEquipment() {
 
       {/* ===== ADD STOCK MODAL ===== */}
       {showAddStockModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start z-50">
+        <div className="fixed inset-0 backdrop-blur-xs bg-opacity-50 flex items-start z-50">
           <div className="w-screen h-screen bg-white overflow-y-auto">
             {/* Modal Header */}
             <div className="bg-orange-500 text-white p-4 text-center font-semibold sticky top-0">
@@ -476,7 +963,7 @@ export default function AdminManageEquipment() {
                   onClick={handleAddStockSubmit}
                   className="px-6 py-3 bg-orange-500 text-white rounded-full font-semibold hover:bg-orange-600 transition"
                 >
-                  บันทึก
+                  ตกลง
                 </button>
               </div>
             </div>
@@ -517,7 +1004,7 @@ export default function AdminManageEquipment() {
                 <div className="mb-4">
                   <p className="text-xs text-gray-600 mb-1">จำนวน</p>
                   <p className="text-sm font-semibold text-gray-800">
-                    {addEquipmentForm.quantity || addStockForm.quantity} ชิ้น
+                    {addEquipmentForm.quantity || addStockForm.quantity} {addEquipmentForm.unit || equipment.find(e => e.id === addStockForm.equipmentId)?.unit || "ชิ้น"}
                   </p>
                 </div>
 
@@ -542,6 +1029,7 @@ export default function AdminManageEquipment() {
               <button
                 onClick={() => {
                   setShowSuccessModal(false)
+                  setSelectedAssetIdToDelete("")
                   setAddStockForm({
                     equipmentId: "",
                     equipmentName: "",
@@ -610,6 +1098,52 @@ export default function AdminManageEquipment() {
                 />
               </div>
 
+              {/* Picture Upload Field */}
+              <div>
+                <label className="text-xs font-semibold text-gray-700 block mb-2">รูปภาพอุปกรณ์</label>
+                {!addEquipmentForm.picture ? (
+                  <label className="relative flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-orange-300 rounded-lg cursor-pointer hover:bg-orange-50 transition">
+                    <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                      <span className="text-4xl mb-2">📷</span>
+                      <p className="text-xs text-gray-700 text-center">
+                        <span className="font-semibold">คลิกเพื่ออัปโหลด</span> หรือลากรูปมาวางที่นี่
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">PNG, JPG, GIF ขนาดไม่เกิน 5MB</p>
+                    </div>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageUpload}
+                      className="hidden"
+                    />
+                  </label>
+                ) : (
+                  <div className="relative">
+                    <img
+                      src={addEquipmentForm.picture}
+                      alt="Preview"
+                      className="w-full h-40 object-cover rounded-lg border border-gray-300"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setAddEquipmentForm({ ...addEquipmentForm, picture: undefined })}
+                      className="absolute top-2 right-2 bg-red-500 text-white rounded-full w-8 h-8 flex items-center justify-center text-lg font-bold hover:bg-red-600 transition shadow-lg"
+                    >
+                      ✕
+                    </button>
+                    <label className="absolute bottom-2 right-2 bg-orange-500 text-white rounded-full w-8 h-8 flex items-center justify-center text-lg cursor-pointer hover:bg-orange-600 transition shadow-lg">
+                      ✎
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleImageUpload}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+                )}
+              </div>
+
               {/* Quantity Field */}
               <div>
                 <label className="text-xs font-semibold text-gray-700 block mb-2">จำนวนเริ่มต้น</label>
@@ -624,6 +1158,18 @@ export default function AdminManageEquipment() {
                   className="w-full px-4 py-2 border border-gray-300 rounded-full text-sm focus:outline-none focus:border-orange-500"
                   placeholder="เช่น 5"
                   min="1"
+                />
+              </div>
+
+              {/* Unit of Measurement Field */}
+              <div>
+                <label className="text-xs font-semibold text-gray-700 block mb-2">หน่วยนับ</label>
+                <input
+                  type="text"
+                  value={addEquipmentForm.unit}
+                  onChange={(e) => setAddEquipmentForm({ ...addEquipmentForm, unit: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-full text-sm focus:outline-none focus:border-orange-500"
+                  placeholder="เช่น ชิ้น, ตัว, เครื่อง, ชุด"
                 />
               </div>
 
@@ -677,6 +1223,614 @@ export default function AdminManageEquipment() {
                   บันทึก
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== ASSET EDIT MODAL (For ครุภัณฑ์ with multiple codes) ===== */}
+      {showAssetEditModal && (
+        <div className="fixed inset-0 backdrop-blur-xs bg-opacity-50 flex items-start z-50">
+          <div className="w-screen h-screen bg-white overflow-y-auto">
+            {/* Modal Header */}
+            <div className="bg-orange-500 text-white p-4 text-center font-semibold sticky top-0">
+              แก้ไขครุภัณฑ์
+            </div>
+
+            {/* Modal Content Wrapper */}
+            <div className="p-6 flex flex-col gap-5">
+
+              {/* Equipment Name Thai */}
+              <div>
+                <label className="text-xs font-semibold text-gray-700 block mb-2">ชื่ออุปกรณ์ (ไทย)</label>
+                <input
+                  type="text"
+                  value={assetEditNameThai}
+                  onChange={(e) => setAssetEditNameThai(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-full text-sm focus:outline-none focus:border-orange-500"
+                />
+              </div>
+
+              {/* Equipment Name English */}
+              <div>
+                <label className="text-xs font-semibold text-gray-700 block mb-2">ชื่ออุปกรณ์ (English)</label>
+                <input
+                  type="text"
+                  value={assetEditNameEnglish}
+                  onChange={(e) => setAssetEditNameEnglish(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-full text-sm focus:outline-none focus:border-orange-500"
+                  placeholder="(optional)"
+                />
+              </div>
+
+              {/* Picture Section */}
+              <div>
+                <label className="text-xs font-semibold text-gray-700 block mb-2">รูปภาพอุปกรณ์</label>
+                {!assetEditPicture ? (
+                  <label className="relative flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-orange-300 rounded-lg cursor-pointer hover:bg-orange-50 transition">
+                    <div className="flex flex-col items-center justify-center">
+                      <span className="text-3xl mb-1">📷</span>
+                      <span className="text-xs text-gray-500">คลิกเพื่ออัปโหลดรูปภาพ</span>
+                    </div>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0]
+                        if (file) {
+                          const reader = new FileReader()
+                          reader.onload = (event) => {
+                            const base64String = event.target?.result as string
+                            setAssetEditPicture(base64String)
+                          }
+                          reader.readAsDataURL(file)
+                        }
+                      }}
+                      className="hidden"
+                    />
+                  </label>
+                ) : (
+                  <div className="relative w-full h-40 rounded-lg overflow-hidden border border-gray-300">
+                    <img
+                      src={assetEditPicture}
+                      alt="Equipment"
+                      className="w-full h-full object-contain bg-gray-50"
+                    />
+                    <div className="absolute top-2 right-2 flex gap-2">
+                      <label className="w-8 h-8 bg-white rounded-full flex items-center justify-center cursor-pointer shadow hover:bg-orange-50 transition">
+                        <span className="text-sm">✎</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0]
+                            if (file) {
+                              const reader = new FileReader()
+                              reader.onload = (event) => {
+                                const base64String = event.target?.result as string
+                                setAssetEditPicture(base64String)
+                              }
+                              reader.readAsDataURL(file)
+                            }
+                          }}
+                          className="hidden"
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setAssetEditPicture(undefined)}
+                        className="w-8 h-8 bg-white rounded-full flex items-center justify-center shadow hover:bg-red-50 transition text-red-500"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Total Count */}
+              <div>
+                <label className="text-xs font-semibold text-gray-700 block mb-2">จำนวนรหัสอุปกรณ์ทั้งหมด</label>
+                <div className="px-4 py-2 border border-orange-300 rounded-full text-sm bg-orange-50 text-orange-700 font-semibold">
+                  {assetIdsForItem.length - assetEditCodesMarkedForDelete.length} รหัสอุปกรณ์
+                  {assetEditCodesMarkedForDelete.length > 0 && ` (จะลบ ${assetEditCodesMarkedForDelete.length})`}
+                </div>
+              </div>
+
+              {/* Search Box */}
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="ค้นหารหัสอุปกรณ์..."
+                  value={assetCodeSearchTerm}
+                  onChange={(e) => setAssetCodeSearchTerm(e.target.value)}
+                  className="w-full px-4 py-2 pr-10 border border-gray-300 rounded-full text-sm focus:outline-none focus:border-orange-500"
+                />
+                <span className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400">🔍</span>
+              </div>
+
+              {/* Asset Code List Section */}
+              <div>
+                <label className="text-xs font-semibold text-gray-700 block mb-3">
+                  รายการรหัสอุปกรณ์ 
+                  <span className="text-orange-600">({assetIdsForItem.filter(id => id.toLowerCase().includes(assetCodeSearchTerm.toLowerCase())).length} รายการ)</span>
+                </label>
+                <div className="border border-gray-200 rounded-lg overflow-hidden bg-gray-50 max-h-80 overflow-y-auto">
+                  {assetIdsForItem
+                    .filter(id => id.toLowerCase().includes(assetCodeSearchTerm.toLowerCase()))
+                    .map((codeId, idx) => {
+                    const isEditing = editingCodeId === codeId
+                    
+                    return (
+                      <div
+                        key={idx}
+                        className={`flex items-center justify-between p-4 border-b border-gray-200 last:border-b-0 transition ${
+                          isEditing ? "bg-blue-50" : "bg-white hover:bg-orange-50"
+                        }`}
+                      >
+                        <div className="flex-1">
+                          {isEditing ? (
+                            <input
+                              type="text"
+                              value={editingCodeValue}
+                              onChange={(e) => setEditingCodeValue(e.target.value)}
+                              className="w-full px-3 py-1.5 border border-orange-400 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-300"
+                              autoFocus
+                            />
+                          ) : (
+                            <div className="text-sm font-semibold text-gray-800">
+                              {codeId}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex gap-2 ml-4">
+                          {isEditing ? (
+                            <>
+                              <button
+                                onClick={() => {
+                                  // Save the edit
+                                  if (editingCodeValue.trim() && editingCodeValue !== codeId) {
+                                    // Update equipment list
+                                    setEquipment(equipment.map(item =>
+                                      item.id === codeId ? { ...item, id: editingCodeValue.trim() } : item
+                                    ))
+                                    // Update assetIdsForItem
+                                    setAssetIdsForItem(assetIdsForItem.map(id =>
+                                      id === codeId ? editingCodeValue.trim() : id
+                                    ))
+                                  }
+                                  setEditingCodeId(null)
+                                  setEditingCodeValue("")
+                                }}
+                                className="px-3 py-1.5 rounded-full text-xs font-medium bg-orange-500 text-white hover:bg-orange-600 transition"
+                              >
+                                บันทึก
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setEditingCodeId(null)
+                                  setEditingCodeValue("")
+                                }}
+                                className="px-3 py-1.5 rounded-full text-xs font-medium border border-gray-300 text-gray-700 hover:bg-gray-100 transition"
+                              >
+                                ยกเลิก
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => {
+                                  setEditingCodeId(codeId)
+                                  setEditingCodeValue(codeId)
+                                }}
+                                className="px-3 py-1.5 rounded-full text-xs font-medium border border-gray-300 text-gray-700 hover:bg-orange-50 hover:border-orange-300 transition"
+                              >
+                                แก้ไข
+                              </button>
+                              <button
+                                onClick={() => handleAssetEditCodeDelete(codeId)}
+                                className="px-3 py-1.5 rounded-full text-xs font-medium border border-red-300 text-red-600 hover:bg-red-50 hover:border-red-500 transition"
+                              >
+                                ลบ
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                  {assetIdsForItem.filter(id => id.toLowerCase().includes(assetCodeSearchTerm.toLowerCase())).length === 0 && (
+                    <div className="p-6 text-center text-gray-500 text-sm">
+                      ไม่พบรหัสอุปกรณ์ที่ค้นหา
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Modal Buttons */}
+              <div className="flex gap-3 mt-6 pb-4">
+                <button
+                  onClick={handleAssetEditCancel}
+                  className="flex-1 py-2 border border-gray-300 text-gray-700 rounded font-medium hover:bg-gray-100 transition"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  onClick={handleAssetDeleteAll}
+                  className="flex-1 py-2 border border-red-500 text-red-500 rounded font-medium hover:bg-red-50 transition"
+                >
+                  ลบ ครุภัณฑ์
+                </button>
+                <button
+                  onClick={handleAssetEditConfirm}
+                  className="flex-1 py-2 bg-orange-500 text-white rounded font-semibold hover:bg-orange-600 transition"
+                >
+                  ตกลง
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== ASSET CODE DELETE CONFIRMATION MODAL ===== */}
+      {showAssetCodeDeleteConfirm && (
+        <div className="fixed inset-0 backdrop-blur-xs bg-opacity-50 flex items-center justify-center z-[60] px-4">
+          <div className="bg-white rounded-lg overflow-hidden w-full max-w-md">
+            <div className="bg-red-500 text-white p-4 text-center font-semibold">
+              ยืนยันการลบรหัสอุปกรณ์
+            </div>
+            <div className="p-6">
+              <p className="text-sm text-gray-600 mb-2">
+                คุณต้องการลบรหัสอุปกรณ์นี้หรือไม่?
+              </p>
+              <p className="text-lg font-bold text-gray-800 mb-4">
+                {assetCodeToDelete}
+              </p>
+              <p className="text-xs text-gray-500">
+                การกระทำนี้ไม่สามารถยกเลิกได้
+              </p>
+            </div>
+            <div className="flex gap-3 p-6 pt-0">
+              <button
+                onClick={() => {
+                  setShowAssetCodeDeleteConfirm(false)
+                  setAssetCodeToDelete("")
+                }}
+                className="flex-1 py-2 border border-gray-300 text-gray-700 rounded font-medium hover:bg-gray-100 transition"
+              >
+                ยกเลิก
+              </button>
+              <button
+                onClick={handleAssetCodeDeleteConfirm}
+                className="flex-1 py-2 bg-red-500 text-white rounded font-semibold hover:bg-red-600 transition"
+              >
+                ลบ
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== ASSET DELETE ALL CONFIRMATION MODAL ===== */}
+      {showAssetDeleteAllConfirm && (
+        <div className="fixed inset-0 backdrop-blur-xs bg-opacity-50 flex items-center justify-center z-[60] px-4">
+          <div className="bg-white rounded-lg overflow-hidden w-full max-w-md">
+            <div className="bg-red-500 text-white p-4 text-center font-semibold">
+              ยืนยันการลบครุภัณฑ์ทั้งหมด
+            </div>
+            <div className="p-6">
+              <p className="text-sm text-gray-600 mb-2">
+                คุณต้องการลบครุภัณฑ์นี้ทั้งหมดหรือไม่?
+              </p>
+              <p className="text-lg font-bold text-gray-800 mb-2">
+                {assetEditNameThai} {assetEditNameEnglish && `(${assetEditNameEnglish})`}
+              </p>
+              <p className="text-sm text-orange-600 font-semibold mb-4">
+                จะลบทั้งหมด {assetIdsForItem.length} รหัสอุปกรณ์
+              </p>
+              <p className="text-xs text-gray-500">
+                การกระทำนี้ไม่สามารถยกเลิกได้
+              </p>
+            </div>
+            <div className="flex gap-3 p-6 pt-0">
+              <button
+                onClick={() => setShowAssetDeleteAllConfirm(false)}
+                className="flex-1 py-2 border border-gray-300 text-gray-700 rounded font-medium hover:bg-gray-100 transition"
+              >
+                ยกเลิก
+              </button>
+              <button
+                onClick={handleAssetDeleteAllConfirm}
+                className="flex-1 py-2 bg-red-500 text-white rounded font-semibold hover:bg-red-600 transition"
+              >
+                ลบทั้งหมด
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== EDIT EQUIPMENT MODAL ===== */}
+      {showEditModal && (
+        <div className="fixed inset-0 backdrop-blur-xs bg-opacity-50 flex items-start z-50">
+          <div className="w-screen h-screen bg-white overflow-y-auto">
+            {/* Modal Header */}
+            <div className="bg-orange-500 text-white p-4 text-center font-semibold sticky top-0">
+              แก้ไขอุปกรณ์
+            </div>
+
+            {/* Modal Content Wrapper */}
+            <div className="p-6 flex flex-col gap-5">
+
+              {/* Equipment Name Thai */}
+              <div>
+                <label className="text-xs font-semibold text-gray-700 block mb-2">ชื่ออุปกรณ์ (ไทย)</label>
+                <input
+                  type="text"
+                  value={editForm.nameThai}
+                  onChange={(e) => setEditForm({ ...editForm, nameThai: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-full text-sm focus:outline-none focus:border-orange-500"
+                />
+              </div>
+
+              {/* Equipment Name English */}
+              <div>
+                <label className="text-xs font-semibold text-gray-700 block mb-2">ชื่ออุปกรณ์ (English)</label>
+                <input
+                  type="text"
+                  value={editForm.nameEnglish}
+                  onChange={(e) => setEditForm({ ...editForm, nameEnglish: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-full text-sm focus:outline-none focus:border-orange-500"
+                  placeholder="(optional)"
+                />
+              </div>
+
+              {/* Quantity */}
+              <div>
+                <label className="text-xs font-semibold text-gray-700 block mb-2">จำนวนคงเหลือ</label>
+                <input
+                  type="number"
+                  value={editForm.quantity}
+                  onChange={(e) => setEditForm({ ...editForm, quantity: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-full text-sm focus:outline-none focus:border-orange-500"
+                  min="0"
+                />
+              </div>
+
+              {/* Unit of Measurement */}
+              <div>
+                <label className="text-xs font-semibold text-gray-700 block mb-2">หน่วยนับ</label>
+                <input
+                  type="text"
+                  value={editForm.unit}
+                  onChange={(e) => setEditForm({ ...editForm, unit: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-full text-sm focus:outline-none focus:border-orange-500"
+                  placeholder="เช่น ชิ้น, ตัว, เครื่อง, ชุด"
+                />
+              </div>
+
+              {/* Picture Section */}
+              <div>
+                <label className="text-xs font-semibold text-gray-700 block mb-2">รูปภาพอุปกรณ์</label>
+                {!editForm.picture ? (
+                  <label className="relative flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-orange-300 rounded-lg cursor-pointer hover:bg-orange-50 transition">
+                    <div className="flex flex-col items-center justify-center">
+                      <span className="text-3xl mb-1">📷</span>
+                      <span className="text-xs text-gray-500">คลิกเพื่ออัปโหลดรูปภาพ</span>
+                    </div>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0]
+                        if (file) {
+                          const reader = new FileReader()
+                          reader.onload = (event) => {
+                            const base64String = event.target?.result as string
+                            setEditForm({ ...editForm, picture: base64String })
+                          }
+                          reader.readAsDataURL(file)
+                        }
+                      }}
+                      className="hidden"
+                    />
+                  </label>
+                ) : (
+                  <div className="relative w-full h-40 rounded-lg overflow-hidden border border-gray-300">
+                    <img
+                      src={editForm.picture}
+                      alt="Equipment"
+                      className="w-full h-full object-contain bg-gray-50"
+                    />
+                    <div className="absolute top-2 right-2 flex gap-2">
+                      <label className="w-8 h-8 bg-white rounded-full flex items-center justify-center cursor-pointer shadow hover:bg-orange-50 transition">
+                        <span className="text-sm">✎</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0]
+                            if (file) {
+                              const reader = new FileReader()
+                              reader.onload = (event) => {
+                                const base64String = event.target?.result as string
+                                setEditForm({ ...editForm, picture: base64String })
+                              }
+                              reader.readAsDataURL(file)
+                            }
+                          }}
+                          className="hidden"
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setEditForm({ ...editForm, picture: undefined })}
+                        className="w-8 h-8 bg-white rounded-full flex items-center justify-center shadow hover:bg-red-50 transition text-red-500"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Modal Buttons */}
+              <div className="flex gap-3 mt-6 pb-4">
+                <button
+                  onClick={() => setShowEditModal(false)}
+                  className="flex-1 py-2 border border-gray-300 text-gray-700 rounded font-medium hover:bg-gray-100 transition"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  onClick={handleDeleteClick}
+                  className="flex-1 py-2 border border-red-500 text-red-500 rounded font-medium hover:bg-red-50 transition"
+                >
+                  ลบ
+                </button>
+                <button
+                  onClick={handleEditSubmit}
+                  className="flex-1 py-2 bg-orange-500 text-white rounded font-semibold hover:bg-orange-600 transition"
+                >
+                  ตกลง
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== DELETE CONFIRMATION MODAL ===== */}
+      {showDeleteConfirmModal && (
+        <div className="fixed inset-0 backdrop-blur-xs bg-opacity-50 flex items-center justify-center z-50 px-4">
+          <div className="bg-white rounded-lg overflow-hidden w-full max-w-md">
+            {/* Modal Header */}
+            <div className="bg-red-500 text-white p-4 text-center font-semibold">
+              ยืนยันการลบ
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6">
+              <p className="text-sm text-gray-600 mb-2">
+                คุณต้องการลบอุปกรณ์ "{editForm.nameThai}{editForm.nameEnglish ? ` (${editForm.nameEnglish})` : ""}" หรือไม่?
+              </p>
+              {selectedAssetIdToDelete && (
+                <p className="text-sm text-orange-600 font-semibold mb-2">
+                  รหัสอุปกรณ์: {selectedAssetIdToDelete}
+                </p>
+              )}
+              <p className="text-xs text-gray-500">
+                การกระทำนี้ไม่สามารถยกเลิกได้
+              </p>
+            </div>
+
+            {/* Modal Buttons */}
+            <div className="flex gap-3 p-6 pt-0">
+              <button
+                onClick={() => {
+                  setShowDeleteConfirmModal(false)
+                  setSelectedAssetIdToDelete("")
+                }}
+                className="flex-1 py-2 border border-gray-300 text-gray-700 rounded font-medium hover:bg-gray-100 transition"
+              >
+                ยกเลิก
+              </button>
+              <button
+                onClick={handleDeleteConfirm}
+                className="flex-1 py-2 bg-red-500 text-white rounded font-semibold hover:bg-red-600 transition"
+              >
+                ลบ
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== EDIT CONFIRMATION MODAL ===== */}
+      {showEditConfirmModal && (
+        <div className="fixed inset-0 backdrop-blur-xs bg-opacity-50 flex items-center justify-center z-50 px-4">
+          <div className="bg-white rounded-lg overflow-hidden w-full max-w-md">
+            {/* Modal Header */}
+            <div className="bg-orange-500 text-white p-4 text-center font-semibold">
+              ยืนยันการแก้ไข
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6">
+              <div className="mb-4">
+                <p className="text-xs text-gray-600 mb-1">ชื่ออุปกรณ์</p>
+                <p className="text-sm font-semibold text-gray-800">
+                  {editForm.nameThai}{editForm.nameEnglish ? ` (${editForm.nameEnglish})` : ""}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-600 mb-1">จำนวนคงเหลือ</p>
+                <p className="text-sm font-semibold text-gray-800">{editForm.quantity} {editForm.unit || "ชิ้น"}</p>
+              </div>
+            </div>
+
+            {/* Modal Buttons */}
+            <div className="flex gap-3 p-6 pt-0">
+              <button
+                onClick={() => setShowEditConfirmModal(false)}
+                className="flex-1 py-2 border border-gray-300 text-gray-700 rounded font-medium hover:bg-gray-100 transition"
+              >
+                ยกเลิก
+              </button>
+              <button
+                onClick={handleEditConfirm}
+                className="flex-1 py-2 bg-orange-500 text-white rounded font-semibold hover:bg-orange-600 transition"
+              >
+                ตกลง
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== ADD STOCK CONFIRMATION MODAL ===== */}
+      {showAddStockConfirmModal && (
+        <div className="fixed inset-0 backdrop-blur-xs bg-opacity-50 flex items-center justify-center z-50 px-4">
+          <div className="bg-white rounded-lg overflow-hidden w-full max-w-md">
+            {/* Modal Header */}
+            <div className="bg-orange-500 text-white p-4 text-center font-semibold">
+              ยืนยันการเพิ่มสต๊อก
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6">
+              <div className="mb-4">
+                <p className="text-xs text-gray-600 mb-1">อุปกรณ์</p>
+                <p className="text-sm font-semibold text-gray-800">{addStockForm.equipmentName}</p>
+              </div>
+              <div className="mb-4">
+                <p className="text-xs text-gray-600 mb-1">จำนวน</p>
+                <p className="text-sm font-semibold text-gray-800">{addStockForm.quantity} {equipment.find(e => e.id === addStockForm.equipmentId)?.unit || "ชิ้น"}</p>
+              </div>
+              {addStockForm.equipmentCategory !== "asset" && (
+                <div>
+                  <p className="text-xs text-gray-600 mb-1">วันที่รับเข้า</p>
+                  <p className="text-sm font-semibold text-gray-800">{addStockForm.date}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Buttons */}
+            <div className="flex gap-3 p-6 pt-0">
+              <button
+                onClick={() => setShowAddStockConfirmModal(false)}
+                className="flex-1 py-2 border border-gray-300 text-gray-700 rounded font-medium hover:bg-gray-100 transition"
+              >
+                ยกเลิก
+              </button>
+              <button
+                onClick={handleAddStockConfirm}
+                className="flex-1 py-2 bg-orange-500 text-white rounded font-semibold hover:bg-orange-600 transition"
+              >
+                ตกลง
+              </button>
             </div>
           </div>
         </div>

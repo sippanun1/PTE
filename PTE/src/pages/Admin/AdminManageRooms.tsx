@@ -1,18 +1,33 @@
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import Header from "../../components/Header"
+import { useAuth } from "../../hooks/useAuth"
+import { logAdminAction } from "../../utils/adminLogger"
 
 interface Room {
   id: string
   code: string
-  name: string
+  type: string
   status: "ว่าง" | "ไม่ว่าง"
+}
+
+interface RoomBooking {
+  id: string
+  roomId: string
+  roomCode: string
+  userName: string
+  userId: string
+  date: string
+  startTime: string
+  endTime: string
+  purpose: string
+  status: "upcoming" | "completed" | "cancelled"
 }
 
 interface RoomFormData {
   code: string
-  name: string
-  category: string
+  type: string
+  customType: string
   image?: string
   usageDays: {
     monday: boolean
@@ -36,18 +51,24 @@ interface RoomFormData {
 
 export default function AdminManageRooms() {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [rooms, setRooms] = useState<Room[]>([
-    { id: "1", code: "CB8720", name: "ห้องเรียน", status: "ว่าง" },
-    { id: "2", code: "CB8785", name: "ห้องปฏิบัติการ", status: "ไม่ว่าง" }
+    { id: "1", code: "CB8720", type: "ห้องเรียน", status: "ไม่ว่าง" },
+    { id: "2", code: "CB8721", type: "ห้องปฏิบัติการ", status: "ว่าง" },
+    { id: "3", code: "CB8722", type: "ห้องประชุม", status: "ว่าง" },
+    { id: "4", code: "CB8723", type: "ห้องเรียน", status: "ไม่ว่าง" },
+    { id: "5", code: "CB8724", type: "ห้องปฏิบัติการ", status: "ว่าง" },
   ])
   const [searchTerm, setSearchTerm] = useState("")
   const [showModal, setShowModal] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deletingRoomId, setDeletingRoomId] = useState<string | null>(null)
   const [editingRoomId, setEditingRoomId] = useState<string | null>(null)
   const [formData, setFormData] = useState<RoomFormData>({
     code: "",
-    name: "",
-    category: "",
+    type: "",
+    customType: "",
     image: "",
     usageDays: {
       monday: false,
@@ -68,18 +89,69 @@ export default function AdminManageRooms() {
       sunday: { start: "08:00", end: "18:00" }
     }
   })
+  const [originalFormData, setOriginalFormData] = useState<RoomFormData | null>(null)
+
+  // Mock room bookings - replace with Firebase
+  const [roomBookings, setRoomBookings] = useState<RoomBooking[]>([
+    {
+      id: "b1",
+      roomId: "1",
+      roomCode: "CB8720",
+      userName: "อาจารย์สมชาย ใจดี",
+      userId: "user1",
+      date: "2026-02-11",
+      startTime: "09:00",
+      endTime: "12:00",
+      purpose: "สอนวิชา Computer Programming",
+      status: "upcoming"
+    },
+    {
+      id: "b2",
+      roomId: "1",
+      roomCode: "CB8720",
+      userName: "ผศ.ดร.วิชัย นักวิจัย",
+      userId: "user4",
+      date: "2026-02-12",
+      startTime: "14:00",
+      endTime: "17:00",
+      purpose: "สัมมนาวิชาการ",
+      status: "upcoming"
+    },
+    {
+      id: "b3",
+      roomId: "2",
+      roomCode: "CB8721",
+      userName: "อาจารย์สมหญิง รักเรียน",
+      userId: "user2",
+      date: "2026-02-13",
+      startTime: "13:00",
+      endTime: "16:00",
+      purpose: "สอนวิชา Database Systems",
+      status: "upcoming"
+    }
+  ])
+
+  // Get upcoming bookings count for a room
+  const getUpcomingBookingsForRoom = (roomId: string) => {
+    const today = new Date().toISOString().split('T')[0]
+    return roomBookings.filter(
+      booking => booking.roomId === roomId && 
+                 booking.status === "upcoming" && 
+                 booking.date >= today
+    )
+  }
 
   const filteredRooms = rooms.filter(room =>
     room.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    room.name.toLowerCase().includes(searchTerm.toLowerCase())
+    room.type.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
   const handleAddRoom = () => {
     setEditingRoomId(null)
     setFormData({
       code: "",
-      name: "",
-      category: "",
+      type: "",
+      customType: "",
       image: "",
       usageDays: {
         monday: false,
@@ -107,10 +179,10 @@ export default function AdminManageRooms() {
     const room = rooms.find(r => r.id === roomId)
     if (room) {
       setEditingRoomId(roomId)
-      setFormData({
+      const editFormData = {
         code: room.code,
-        name: room.name,
-        category: "",
+        type: room.type,
+        customType: room.type === "ห้องอื่นๆ" ? "" : "",
         image: "",
         usageDays: {
           monday: true,
@@ -130,7 +202,9 @@ export default function AdminManageRooms() {
           saturday: { start: "09:00", end: "17:00" },
           sunday: { start: "09:00", end: "17:00" }
         }
-      })
+      }
+      setFormData(editFormData)
+      setOriginalFormData(JSON.parse(JSON.stringify(editFormData)))
       setShowModal(true)
     }
   }
@@ -139,26 +213,156 @@ export default function AdminManageRooms() {
     setShowConfirm(true)
   }
 
+  const getDayName = (day: string) => {
+    const dayNames: { [key: string]: string } = {
+      monday: 'จันทร์',
+      tuesday: 'อังคาร',
+      wednesday: 'พุธ',
+      thursday: 'พฤหัสบดี',
+      friday: 'ศุกร์',
+      saturday: 'เสาร์',
+      sunday: 'อาทิตย์'
+    }
+    return dayNames[day] || day
+  }
+
+  const buildChangeDetails = () => {
+    if (!originalFormData) return `Room code: ${formData.code}`
+    
+    const changes: string[] = []
+    const finalType = formData.type === "ห้องอื่นๆ" ? formData.customType : formData.type
+    const originalFinalType = originalFormData.type === "ห้องอื่นๆ" ? originalFormData.customType : originalFormData.type
+    
+    // Check room code change
+    if (formData.code !== originalFormData.code) {
+      changes.push(`รหัสห้อง: ${originalFormData.code} → ${formData.code}`)
+    }
+    
+    // Check room type change
+    if (finalType !== originalFinalType) {
+      changes.push(`ประเภทห้อง: ${originalFinalType} → ${finalType}`)
+    }
+    
+    // Check usage days changes
+    const daysChanged: string[] = []
+    Object.keys(formData.usageDays).forEach((day) => {
+      const dayKey = day as keyof typeof formData.usageDays
+      if (formData.usageDays[dayKey] !== originalFormData.usageDays[dayKey]) {
+        daysChanged.push(`${getDayName(day)}: ${originalFormData.usageDays[dayKey] ? 'เปิด' : 'ปิด'} → ${formData.usageDays[dayKey] ? 'เปิด' : 'ปิด'}`)
+      }
+    })
+    if (daysChanged.length > 0) {
+      changes.push(`วันใช้งาน: ${daysChanged.join(', ')}`)
+    }
+    
+    // Check time ranges changes
+    const timeChanged: string[] = []
+    Object.keys(formData.timeRanges).forEach((day) => {
+      const dayKey = day as keyof typeof formData.timeRanges
+      if (formData.usageDays[dayKey]) {
+        const oldTime = originalFormData.timeRanges[dayKey]
+        const newTime = formData.timeRanges[dayKey]
+        if (oldTime.start !== newTime.start || oldTime.end !== newTime.end) {
+          timeChanged.push(`${getDayName(day)}: ${oldTime.start}-${oldTime.end} → ${newTime.start}-${newTime.end}`)
+        }
+      }
+    })
+    if (timeChanged.length > 0) {
+      changes.push(`เวลา: ${timeChanged.join(', ')}`)
+    }
+    
+    if (changes.length === 0) {
+      return `Room code: ${formData.code} (ไม่มีการเปลี่ยนแปลง)`
+    }
+    
+    return `Room code: ${formData.code} | ${changes.join(' | ')}`
+  }
+
   const handleConfirmSave = () => {
     if (editingRoomId) {
       // Edit existing room
+      const finalType = formData.type === "ห้องอื่นๆ" ? formData.customType : formData.type
       setRooms(rooms.map(room =>
         room.id === editingRoomId
-          ? { ...room, code: formData.code, name: formData.name }
+          ? { ...room, code: formData.code, type: finalType }
           : room
       ))
+      
+      // Log admin action for edit with detailed changes
+      if (user) {
+        logAdminAction({
+          user,
+          action: 'update',
+          type: 'room',
+          itemName: finalType,
+          details: buildChangeDetails()
+        })
+      }
+      setOriginalFormData(null)
     } else {
       // Add new room
+      const finalType = formData.type === "ห้องอื่นๆ" ? formData.customType : formData.type
       const newRoom: Room = {
         id: (rooms.length + 1).toString(),
         code: formData.code,
-        name: formData.name,
+        type: finalType,
         status: "ว่าง"
       }
       setRooms([...rooms, newRoom])
+      
+      // Log admin action for add
+      if (user) {
+        logAdminAction({
+          user,
+          action: 'add',
+          type: 'room',
+          itemName: finalType,
+          details: `Room code: ${formData.code}`
+        })
+      }
     }
     setShowModal(false)
     setShowConfirm(false)
+  }
+
+  const handleDeleteRoom = (roomId: string) => {
+    setDeletingRoomId(roomId)
+    setShowDeleteConfirm(true)
+  }
+
+  const handleConfirmDelete = () => {
+    if (deletingRoomId) {
+      const deletedRoom = rooms.find(room => room.id === deletingRoomId)
+      const affectedBookings = getUpcomingBookingsForRoom(deletingRoomId)
+      
+      // Cancel all upcoming bookings for this room
+      if (affectedBookings.length > 0) {
+        setRoomBookings(prev => prev.map(booking => 
+          booking.roomId === deletingRoomId && booking.status === "upcoming"
+            ? { ...booking, status: "cancelled" as const }
+            : booking
+        ))
+      }
+      
+      // Delete the room
+      setRooms(rooms.filter(room => room.id !== deletingRoomId))
+      
+      // Log admin action
+      if (user && deletedRoom) {
+        const bookingInfo = affectedBookings.length > 0 
+          ? ` | ยกเลิกการจอง ${affectedBookings.length} รายการ`
+          : ''
+        logAdminAction({
+          user,
+          action: 'delete',
+          type: 'room',
+          itemName: deletedRoom.type,
+          details: `Room code: ${deletedRoom.code}${bookingInfo}`
+        })
+      }
+    }
+    setShowDeleteConfirm(false)
+    setDeletingRoomId(null)
   }
 
   const getSelectedDaysText = () => {
@@ -168,7 +372,9 @@ export default function AdminManageRooms() {
       tuesday: "อังคาร",
       wednesday: "พุธ",
       thursday: "พฤหัสบดี",
-      friday: "ศุกร์"
+      friday: "ศุกร์",
+      saturday: "เสาร์",
+      sunday: "อาทิตย์"
     }
     Object.entries(formData.usageDays).forEach(([key, checked]) => {
       if (checked && key in dayLabels) {
@@ -185,9 +391,11 @@ export default function AdminManageRooms() {
       tuesday: "อังคาร",
       wednesday: "พุธ",
       thursday: "พฤหัสบดี",
-      friday: "ศุกร์"
+      friday: "ศุกร์",
+      saturday: "เสาร์",
+      sunday: "อาทิตย์"
     }
-    const dayKeys = ["monday", "tuesday", "wednesday", "thursday", "friday"] as const
+    const dayKeys = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] as const
     dayKeys.forEach((key) => {
       if (formData.usageDays[key]) {
         const dayLabel = dayLabels[key as keyof typeof dayLabels]
@@ -195,6 +403,10 @@ export default function AdminManageRooms() {
       }
     })
     return times.length > 0 ? times.join(" / ") : "ไม่มี"
+  }
+
+  const handleShowSchedule = (roomId: string) => {
+    navigate(`/admin/room-schedule/${roomId}`)
   }
 
   return (
@@ -272,7 +484,7 @@ export default function AdminManageRooms() {
           {/* Table Headers */}
           <div className="w-full mb-4 grid grid-cols-4 gap-2 text-xs font-semibold text-gray-700">
             <div>เลขห้อง</div>
-            <div>ประมาณ</div>
+            <div>ประเภท</div>
             <div>สถานะ</div>
             <div>การจัดการ</div>
           </div>
@@ -285,35 +497,48 @@ export default function AdminManageRooms() {
                   {/* Room Code */}
                   <div className="font-semibold">{room.code}</div>
 
-                  {/* Room Name */}
-                  <div className="text-gray-600">{room.name}</div>
+                  {/* Room Type */}
+                  <div className="text-gray-600">{room.type}</div>
 
-                  {/* Status Badge */}
+                  {/* Status Button - Click to view schedule */}
                   <div>
-                    <span
-                      className={`
-                        px-3 py-1 rounded-full text-white text-xs font-semibold
-                        ${room.status === "ว่าง" ? "bg-green-500" : "bg-red-500"}
-                      `}
+                    <button
+                      onClick={() => handleShowSchedule(room.id)}
+                      className="px-3 py-1 bg-green-500 text-white text-xs font-semibold rounded hover:bg-purple-600 transition"
                     >
-                      {room.status}
-                    </span>
+                      ดูการจอง
+                    </button>
                   </div>
 
                   {/* Action Button */}
-                  <button
-                    onClick={() => handleEditRoom(room.id)}
-                    className="
-                      px-3 py-1
-                      bg-blue-500
-                      text-white text-xs font-semibold
-                      rounded
-                      hover:bg-blue-600
-                      transition
-                    "
-                  >
-                    ข้อมูล
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleEditRoom(room.id)}
+                      className="
+                        px-3 py-1
+                        bg-blue-500
+                        text-white text-xs font-semibold
+                        rounded
+                        hover:bg-blue-600
+                        transition
+                      "
+                    >
+                      ข้อมูล
+                    </button>
+                    <button
+                      onClick={() => handleDeleteRoom(room.id)}
+                      className="
+                        px-3 py-1
+                        bg-red-500
+                        text-white text-xs font-semibold
+                        rounded
+                        hover:bg-red-600
+                        transition
+                      "
+                    >
+                      ลบ
+                    </button>
+                  </div>
                 </div>
               ))
             ) : (
@@ -328,15 +553,15 @@ export default function AdminManageRooms() {
 
       {/* ===== MODAL FORM ===== */}
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end z-50 top-0 left-0 right-0 bottom-0">
-          <div className="w-full bg-white rounded-t-lg max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 backdrop-blur-xs bg-opacity-50 flex items-start z-50">
+          <div className="w-screen h-screen bg-white overflow-y-auto">
             {/* Modal Header */}
             <div className="bg-orange-500 text-white p-4 text-center font-semibold sticky top-0">
               {editingRoomId ? "แก้ไขข้อมูลห้อง" : "เพิ่มห้องใหม่"}
             </div>
 
             {/* Modal Content */}
-            <div className="p-6 flex flex-col gap-5">
+            <div className="p-6 flex flex-col gap-5 max-w-md mx-auto">
               {/* Room Code */}
               <div>
                 <label className="text-xs font-semibold text-gray-700 block mb-2">ข้อมูล/เลขห้อง</label>
@@ -349,21 +574,35 @@ export default function AdminManageRooms() {
                 />
               </div>
 
-              {/* Room Name */}
+              {/* Room Type */}
               <div>
-                <label className="text-xs font-semibold text-gray-700 block mb-2">ประมาณ</label>
+                <label className="text-xs font-semibold text-gray-700 block mb-2">ประเภท</label>
                 <select
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:border-orange-500"
+                  value={formData.type}
+                  onChange={(e) => setFormData({ ...formData, type: e.target.value, customType: "" })}
+                  className="w-full max-w-full px-3 py-2 border border-gray-300 rounded-full text-sm focus:outline-none focus:border-orange-500 overflow-hidden"
                 >
-                  <option value="">-- เลือกประเภทห้อง --</option>
+                  <option value="">เลือกประเภทห้อง</option>
                   <option value="ห้องเรียน">ห้องเรียน</option>
                   <option value="ห้องปฏิบัติการ">ห้องปฏิบัติการ</option>
                   <option value="ห้องประชุม">ห้องประชุม</option>
                   <option value="ห้องอื่นๆ">ห้องอื่นๆ</option>
                 </select>
               </div>
+
+              {/* Custom Type Input - Show when "ห้องอื่นๆ" is selected */}
+              {formData.type === "ห้องอื่นๆ" && (
+                <div>
+                  <label className="text-xs font-semibold text-gray-700 block mb-2">ระบุประเภทห้อง</label>
+                  <input
+                    type="text"
+                    value={formData.customType}
+                    onChange={(e) => setFormData({ ...formData, customType: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:border-orange-500"
+                    placeholder="เช่น ห้องพักอาจารย์"
+                  />
+                </div>
+              )}
 
               {/* Room Image */}
               <div>
@@ -385,7 +624,9 @@ export default function AdminManageRooms() {
                     { key: "tuesday", label: "อังคาร" },
                     { key: "wednesday", label: "พุธ" },
                     { key: "thursday", label: "พฤหัสบดี" },
-                    { key: "friday", label: "ศุกร์" }
+                    { key: "friday", label: "ศุกร์" },
+                    { key: "saturday", label: "เสาร์" },
+                    { key: "sunday", label: "อาทิตย์" }
                   ].map((day) => (
                     <div key={day.key}>
                       <label className="flex items-center gap-2 text-sm mb-2">
@@ -497,10 +738,10 @@ export default function AdminManageRooms() {
 
             {/* Room Information Box */}
             <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-6">
-              {/* Room Code and Name */}
+              {/* Room Code and Type */}
               <div className="mb-3">
-                <p className="text-xs text-gray-600 mb-1">รหัสห้อง / ชื่อห้อง</p>
-                <p className="text-sm font-semibold text-gray-800">{formData.code} - {formData.name}</p>
+                <p className="text-xs text-gray-600 mb-1">รหัสห้อง / ประเภทห้อง</p>
+                <p className="text-sm font-semibold text-gray-800">{formData.code} - {formData.type === "ห้องอื่นๆ" ? formData.customType : formData.type}</p>
               </div>
 
               {/* Usage Days */}
@@ -533,6 +774,64 @@ export default function AdminManageRooms() {
                 className="flex-1 py-3 bg-orange-500 text-white rounded-lg font-semibold hover:bg-orange-600 transition"
               >
                 บันทึก
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 backdrop-blur-xs bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-md w-full p-6 border-4 border-red-300">
+            {/* Header */}
+            <h2 className="text-lg font-bold text-gray-800 mb-4 text-center">ยืนยันการลบห้อง</h2>
+
+            {/* Message */}
+            <p className="text-sm text-gray-600 mb-6 leading-relaxed">
+              คุณแน่ใจที่จะลบห้องนี้หรือไม่? การดำเนินการนี้ไม่สามารถย้อนกลับได้
+            </p>
+
+            {/* Room Information Box */}
+            {deletingRoomId && (
+              <div className={`bg-red-50 border border-red-200 rounded-lg p-4 ${getUpcomingBookingsForRoom(deletingRoomId).length > 0 ? 'mb-4' : 'mb-6'}`}>
+                <p className="text-xs text-gray-600 mb-1">รหัสห้อง / ประเภทห้อง</p>
+                <p className="text-sm font-semibold text-gray-800">
+                  {rooms.find(r => r.id === deletingRoomId)?.code} - {rooms.find(r => r.id === deletingRoomId)?.type}
+                </p>
+              </div>
+            )}
+
+            {/* Warning about upcoming bookings */}
+            {deletingRoomId && getUpcomingBookingsForRoom(deletingRoomId).length > 0 && (
+              <div className="bg-yellow-50 border border-yellow-300 rounded-lg p-4 mb-6">
+                <p className="text-sm font-semibold text-yellow-800 flex items-center gap-2">
+                  <span>⚠️</span>
+                  การจองที่จะถูกยกเลิก: {getUpcomingBookingsForRoom(deletingRoomId).length} รายการ
+                </p>
+                <div className="mt-2 text-xs text-yellow-700 max-h-24 overflow-y-auto">
+                  {getUpcomingBookingsForRoom(deletingRoomId).map(booking => (
+                    <p key={booking.id} className="py-1 border-b border-yellow-200 last:border-0">
+                      📅 {new Date(booking.date).toLocaleDateString('th-TH')} {booking.startTime}-{booking.endTime} - {booking.userName}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="flex-1 py-3 border border-gray-400 text-gray-600 rounded-lg font-medium hover:bg-gray-100 transition"
+              >
+                ยกเลิก
+              </button>
+              <button
+                onClick={handleConfirmDelete}
+                className="flex-1 py-3 bg-red-500 text-white rounded-lg font-semibold hover:bg-red-600 transition"
+              >
+                ลบ
               </button>
             </div>
           </div>

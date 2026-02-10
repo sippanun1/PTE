@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
-import Header from "../../components/Header"
-import type { SelectedEquipment } from "../../App"
+import Header from "../../../components/Header"
+import type { SelectedEquipment } from "../../../App"
 
 interface CartSummaryProps {
   cartItems: SelectedEquipment[]

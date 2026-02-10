@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
-import Header from "../../components/Header"
-import UserInfoBox from "../../components/UserInfoBox"
+import Header from "../../../components/Header"
+import UserInfoBox from "../../../components/UserInfoBox"
 
 interface EquipmentItem {
   id: string

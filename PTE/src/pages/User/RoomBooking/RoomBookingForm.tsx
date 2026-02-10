@@ -1,8 +1,8 @@
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
-import Header from "../../components/Header"
-import DatePicker from "../../components/DatePicker"
-import type { BookingData } from "../../App"
+import Header from "../../../components/Header"
+import DatePicker from "../../../components/DatePicker"
+import type { BookingData } from "../../../App"
 
 interface RoomBookingFormProps {
   bookingData: BookingData | null

@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
-import Header from "../../components/Header"
-import type { ReturnBookingData } from "../../App"
+import Header from "../../../components/Header"
+import type { ReturnBookingData } from "../../../App"
 
 interface ReturnRoomFormProps {
   booking: ReturnBookingData
