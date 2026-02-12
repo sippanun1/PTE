@@ -1,5 +1,8 @@
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
+import { addDoc, collection } from "firebase/firestore"
+import { db } from "../../../firebase/firebase"
+import { useAuth } from "../../../hooks/useAuth"
 import Header from "../../../components/Header"
 import DatePicker from "../../../components/DatePicker"
 import type { BookingData } from "../../../App"
@@ -20,11 +23,13 @@ export default function RoomBookingForm({
   onConfirmBooking
 }: RoomBookingFormProps) {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [date, setDate] = useState("")
   const [time, setTime] = useState(bookingData?.time || "")
   const [people, setPeople] = useState(1)
   const [objective, setObjective] = useState("")
   const [showApprovalModal, setShowApprovalModal] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const timeOptions = [
     "09:00 - 11:00",
@@ -43,19 +48,48 @@ export default function RoomBookingForm({
     }
   }
 
-  const handleBooking = () => {
+  const handleBooking = async () => {
     if (!date || !time || !objective.trim()) {
       alert("กรุณากรอกข้อมูลให้ครบถ้วน")
       return
     }
-    onConfirmBooking({
-      room: bookingData?.room || "",
-      date,
-      time,
-      people,
-      objective
-    })
-    setShowApprovalModal(true)
+
+    setIsSubmitting(true)
+    try {
+      // Parse time range
+      const timeParts = time.split(" - ")
+      const startTime = timeParts[0] || ""
+      const endTime = timeParts[1] || ""
+
+      // Save to Firebase
+      await addDoc(collection(db, "roomBookings"), {
+        roomCode: bookingData?.room || "",
+        roomType: "", // Can be enhanced to include room type
+        userName: user?.displayName || user?.email || "ผู้ใช้",
+        userId: user?.uid || "",
+        date: date,
+        startTime: startTime,
+        endTime: endTime,
+        purpose: objective,
+        people: people,
+        status: "upcoming",
+        bookedAt: new Date().toISOString()
+      })
+
+      onConfirmBooking({
+        room: bookingData?.room || "",
+        date,
+        time,
+        people,
+        objective
+      })
+      setShowApprovalModal(true)
+    } catch (error) {
+      console.error("Error saving booking:", error)
+      alert("เกิดข้อผิดพลาดในการจองห้อง")
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const handleApprovalModalClose = () => {
@@ -186,10 +220,11 @@ export default function RoomBookingForm({
             </button>
             <button
               onClick={handleBooking}
-              className="flex-1 py-3 rounded-full text-white text-sm font-medium hover:opacity-90 transition"
+              disabled={isSubmitting}
+              className="flex-1 py-3 rounded-full text-white text-sm font-medium hover:opacity-90 transition disabled:opacity-50"
               style={{ backgroundColor: "#FF7F50" }}
             >
-              จองห้อง
+              {isSubmitting ? "กำลังบันทึก..." : "จองห้อง"}
             </button>
           </div>
         </div>

@@ -6,13 +6,27 @@ import Header from "../../components/Header"
 import { useAuth } from "../../hooks/useAuth"
 import { logAdminAction } from "../../utils/adminLogger"
 
+// Default equipment types with subtypes
+const defaultEquipmentTypes: { [key: string]: string[] } = {
+  "งานวัดและตรวจสอบ": [],
+  "งานถอด-ประกอบชิ้นส่วน": [],
+  "งานติดตั้งอุปกรณ์": [],
+  "งานทำเครื่องหมายและขีดเส้น": [],
+  "งานช่างมือพื้นฐาน": [],
+  "Welding": ["SMAW", "GMAW", "GTAW", "GAS", "FCAW"],
+  "Machine": ["Milling", "Lathe", "เครื่องไส", "เครื่องตัด", "เครื่องเจาะ"],
+  "Safety": [],
+}
+
 interface Equipment {
   id: string
   name: string
   category: "consumable" | "asset" | "main"
   quantity: number
   unit: string
-  picture?: string 
+  picture?: string
+  equipmentType?: string
+  equipmentSubType?: string
 }
 
 interface AddStockForm {
@@ -35,6 +49,8 @@ interface AddEquipmentForm {
   unit: string
   notes: string
   picture?: string
+  equipmentType: string
+  equipmentSubType: string
 }
 
 interface EditEquipmentForm {
@@ -44,6 +60,8 @@ interface EditEquipmentForm {
   quantity: string
   unit: string
   picture?: string
+  equipmentType: string
+  equipmentSubType: string
 }
 
 export default function AdminManageEquipment() {
@@ -67,6 +85,14 @@ export default function AdminManageEquipment() {
   const [assetEditNameEnglish, setAssetEditNameEnglish] = useState("")
   const [assetEditCodesMarkedForDelete, setAssetEditCodesMarkedForDelete] = useState<string[]>([])
   const [assetEditPicture, setAssetEditPicture] = useState<string | undefined>(undefined)
+  const [assetEditType, setAssetEditType] = useState<string>("")
+  const [assetEditSubType, setAssetEditSubType] = useState<string>("")
+  // Original values for logging (before edit)
+  const [originalAssetType, setOriginalAssetType] = useState<string>("")
+  const [originalAssetSubType, setOriginalAssetSubType] = useState<string>("")
+  const [originalEditType, setOriginalEditType] = useState<string>("")
+  const [originalEditSubType, setOriginalEditSubType] = useState<string>("")
+  const [originalEditQuantity, setOriginalEditQuantity] = useState<string>("")
   const [showAssetCodeDeleteConfirm, setShowAssetCodeDeleteConfirm] = useState(false)
   const [assetCodeToDelete, setAssetCodeToDelete] = useState("")
   const [showAssetDeleteAllConfirm, setShowAssetDeleteAllConfirm] = useState(false)
@@ -78,7 +104,9 @@ export default function AdminManageEquipment() {
     nameThai: "",
     nameEnglish: "",
     quantity: "",
-    unit: "ชิ้น"
+    unit: "ชิ้น",
+    equipmentType: "",
+    equipmentSubType: ""
   })
   const [addStockForm, setAddStockForm] = useState<AddStockForm>({
     equipmentId: "",
@@ -98,10 +126,36 @@ export default function AdminManageEquipment() {
     quantity: "",
     unit: "ชิ้น",
     notes: "",
-    picture: undefined
+    picture: undefined,
+    equipmentType: "",
+    equipmentSubType: ""
   })
+  // Custom equipment types (loaded from Firebase)
+  const [equipmentTypes, setEquipmentTypes] = useState<{ [key: string]: string[] }>(defaultEquipmentTypes)
+  const [showAddTypeModal, setShowAddTypeModal] = useState(false)
+  const [newTypeName, setNewTypeName] = useState("")
+  const [newTypeSubTypes, setNewTypeSubTypes] = useState<string[]>([])
+  const [newSubTypeInput, setNewSubTypeInput] = useState("")
   const [equipment, setEquipment] = useState<Equipment[]>([])
   const [loading, setLoading] = useState(true)
+
+  // Load custom equipment types from Firestore
+  useEffect(() => {
+    const loadEquipmentTypes = async () => {
+      try {
+        const querySnapshot = await getDocs(collection(db, "equipmentTypes"))
+        const customTypes: { [key: string]: string[] } = { ...defaultEquipmentTypes }
+        querySnapshot.forEach((doc) => {
+          const data = doc.data()
+          customTypes[data.name] = data.subTypes || []
+        })
+        setEquipmentTypes(customTypes)
+      } catch (error) {
+        console.error("Error loading equipment types:", error)
+      }
+    }
+    loadEquipmentTypes()
+  }, [])
 
   // Load equipment from Firestore on mount
   useEffect(() => {
@@ -116,7 +170,9 @@ export default function AdminManageEquipment() {
             category: doc.data().category,
             quantity: doc.data().quantity,
             unit: doc.data().unit || "ชิ้น",
-            picture: doc.data().picture
+            picture: doc.data().picture,
+            equipmentType: doc.data().equipmentType || "",
+            equipmentSubType: doc.data().equipmentSubType || ""
           })
         })
         setEquipment(equipmentList)
@@ -177,7 +233,9 @@ export default function AdminManageEquipment() {
       quantity: "",
       unit: "ชิ้น",
       notes: "",
-      picture: undefined
+      picture: undefined,
+      equipmentType: "",
+      equipmentSubType: ""
     })
     setShowAddEquipmentModal(true)
   }
@@ -204,6 +262,12 @@ export default function AdminManageEquipment() {
       return
     }
     
+    // Check for empty IDs
+    if (isAsset && addEquipmentForm.ids.some(id => !id.trim())) {
+      alert("รหัสอุปกรณ์ต้องไม่เป็นค่าว่าง")
+      return
+    }
+    
     // Check for duplicate IDs
     if (isAsset && new Set(addEquipmentForm.ids).size !== addEquipmentForm.ids.length) {
       alert("รหัสอุปกรณ์ต้องไม่ซ้ำกัน")
@@ -220,7 +284,9 @@ export default function AdminManageEquipment() {
             category: addEquipmentForm.category,
             quantity: 1,
             unit: addEquipmentForm.unit,
-            picture: addEquipmentForm.picture
+            picture: addEquipmentForm.picture,
+            equipmentType: addEquipmentForm.equipmentType,
+            equipmentSubType: addEquipmentForm.equipmentSubType
           }))
           
           // Save each to Firestore
@@ -237,7 +303,9 @@ export default function AdminManageEquipment() {
             category: addEquipmentForm.category,
             quantity: parseInt(addEquipmentForm.quantity),
             unit: addEquipmentForm.unit,
-            picture: addEquipmentForm.picture
+            picture: addEquipmentForm.picture,
+            equipmentType: addEquipmentForm.equipmentType,
+            equipmentSubType: addEquipmentForm.equipmentSubType
           }
           
           // Save to Firestore
@@ -253,7 +321,7 @@ export default function AdminManageEquipment() {
             action: 'add',
             type: 'equipment',
             itemName: addEquipmentForm.nameThai,
-            details: `Category: ${addEquipmentForm.category === 'consumable' ? 'วัสดุสิ้นเปลือง' : 'ครุภัณฑ์'}, Quantity: ${addEquipmentForm.quantity}, English: ${addEquipmentForm.nameEnglish || 'N/A'}`
+            details: `Category: ${addEquipmentForm.category === 'consumable' ? 'วัสดุสิ้นเปลือง' : 'ครุภัณฑ์'}, Type: ${addEquipmentForm.equipmentType || 'N/A'}${addEquipmentForm.equipmentSubType ? ` (${addEquipmentForm.equipmentSubType})` : ''}, Quantity: ${addEquipmentForm.quantity}`
           })
         }
         
@@ -280,9 +348,14 @@ export default function AdminManageEquipment() {
       const nameThai = nameParts[0]
       const nameEnglish = nameParts[1] ? nameParts[1].replace(")", "") : ""
       
-      // Get picture from first item with this name
+      // Get picture and type from first item with this name
       const firstItem = equipment.find(e => e.name === equipmentName)
       setAssetEditPicture(firstItem?.picture)
+      setAssetEditType(firstItem?.equipmentType || "")
+      setAssetEditSubType(firstItem?.equipmentSubType || "")
+      // Store original values for logging
+      setOriginalAssetType(firstItem?.equipmentType || "")
+      setOriginalAssetSubType(firstItem?.equipmentSubType || "")
       
       setAssetEditNameThai(nameThai)
       setAssetEditNameEnglish(nameEnglish)
@@ -305,8 +378,14 @@ export default function AdminManageEquipment() {
         nameEnglish: nameEnglish,
         quantity: item.quantity.toString(),
         unit: item.unit || "ชิ้น",
-        picture: item.picture
+        picture: item.picture,
+        equipmentType: item.equipmentType || "",
+        equipmentSubType: item.equipmentSubType || ""
       })
+      // Store original values for logging
+      setOriginalEditType(item.equipmentType || "")
+      setOriginalEditSubType(item.equipmentSubType || "")
+      setOriginalEditQuantity(item.quantity.toString())
       setShowEditModal(true)
     }
   }
@@ -328,7 +407,9 @@ export default function AdminManageEquipment() {
             name: fullName,
             quantity: parseInt(editForm.quantity) || 0,
             unit: editForm.unit,
-            picture: editForm.picture
+            picture: editForm.picture,
+            equipmentType: editForm.equipmentType,
+            equipmentSubType: editForm.equipmentSubType
           })
           break
         }
@@ -336,18 +417,32 @@ export default function AdminManageEquipment() {
       
       setEquipment(equipment.map(item =>
         item.id === editForm.id
-          ? { ...item, name: fullName, quantity: parseInt(editForm.quantity) || 0, unit: editForm.unit, picture: editForm.picture }
+          ? { ...item, name: fullName, quantity: parseInt(editForm.quantity) || 0, unit: editForm.unit, picture: editForm.picture, equipmentType: editForm.equipmentType, equipmentSubType: editForm.equipmentSubType }
           : item
       ))
       
       // Log admin action
       if (user) {
+        const changes: string[] = []
+        
+        // Check quantity change
+        if (editForm.quantity !== originalEditQuantity) {
+          changes.push(`จำนวน: ${originalEditQuantity} → ${editForm.quantity}`)
+        }
+        
+        // Check type change
+        const oldType = originalEditType ? `${originalEditType}${originalEditSubType ? ` (${originalEditSubType})` : ''}` : 'ไม่ระบุ'
+        const newType = editForm.equipmentType ? `${editForm.equipmentType}${editForm.equipmentSubType ? ` (${editForm.equipmentSubType})` : ''}` : 'ไม่ระบุ'
+        if (originalEditType !== editForm.equipmentType || originalEditSubType !== editForm.equipmentSubType) {
+          changes.push(`ประเภท: ${oldType} → ${newType}`)
+        }
+        
         logAdminAction({
           user,
           action: 'edit',
           type: 'equipment',
           itemName: editForm.nameThai,
-          details: `Updated quantity to: ${editForm.quantity}, English name: ${editForm.nameEnglish || 'N/A'}`
+          details: changes.length > 0 ? changes.join(', ') : 'ไม่มีการเปลี่ยนแปลง'
         })
       }
       
@@ -363,6 +458,55 @@ export default function AdminManageEquipment() {
   const handleDeleteClick = () => {
     setShowEditModal(false)
     setShowDeleteConfirmModal(true)
+  }
+
+  // Handle adding new equipment type
+  const handleAddNewType = async () => {
+    if (!newTypeName.trim()) {
+      alert("กรุณากรอกชื่อประเภท")
+      return
+    }
+    
+    // Check if type already exists
+    if (equipmentTypes[newTypeName]) {
+      alert("ประเภทนี้มีอยู่แล้ว")
+      return
+    }
+    
+    try {
+      // Save to Firebase
+      await addDoc(collection(db, "equipmentTypes"), {
+        name: newTypeName,
+        subTypes: newTypeSubTypes
+      })
+      
+      // Update local state
+      setEquipmentTypes({
+        ...equipmentTypes,
+        [newTypeName]: newTypeSubTypes
+      })
+      
+      // Log admin action
+      if (user) {
+        logAdminAction({
+          user,
+          action: 'add',
+          type: 'equipment',
+          itemName: newTypeName,
+          details: `Added new equipment type${newTypeSubTypes.length > 0 ? ` with subtypes: ${newTypeSubTypes.join(', ')}` : ''}`
+        })
+      }
+      
+      setShowAddTypeModal(false)
+      setNewTypeName("")
+      setNewTypeSubTypes([])
+      setNewSubTypeInput("")
+      setSuccessMessage("เพิ่มประเภทอุปกรณ์ใหม่สำเร็จ!")
+      setShowSuccessModal(true)
+    } catch (error) {
+      console.error("Error adding equipment type:", error)
+      alert("เกิดข้อผิดพลาดในการบันทึกข้อมูล")
+    }
   }
 
   const handleAssetEditCodeDelete = (codeId: string) => {
@@ -477,30 +621,44 @@ export default function AdminManageEquipment() {
         if (docSnap.data().name === selectedEquipmentId) {
           batch.update(doc(db, "equipment", docSnap.id), {
             name: newFullName,
-            picture: assetEditPicture
+            picture: assetEditPicture,
+            equipmentType: assetEditType,
+            equipmentSubType: assetEditSubType
           })
         }
       }
       await batch.commit()
       
-      // Update name and picture for all assets with same name
+      // Update name, picture, type and subtype for all assets with same name
       const updatedEquipment = equipment.map(item => {
         if (item.name === selectedEquipmentId) {
-          return { ...item, name: newFullName, picture: assetEditPicture }
+          return { ...item, name: newFullName, picture: assetEditPicture, equipmentType: assetEditType, equipmentSubType: assetEditSubType }
         }
         return item
       })
       
       setEquipment(updatedEquipment)
 
-      // Log admin action if name changed
-      if (user && newFullName !== selectedEquipmentId) {
+      // Log admin action
+      if (user) {
+        const changes: string[] = []
+        if (newFullName !== selectedEquipmentId) {
+          changes.push(`ชื่อ: "${selectedEquipmentId}" → "${newFullName}"`)
+        }
+        
+        // Check type change
+        const oldType = originalAssetType ? `${originalAssetType}${originalAssetSubType ? ` (${originalAssetSubType})` : ''}` : 'ไม่ระบุ'
+        const newType = assetEditType ? `${assetEditType}${assetEditSubType ? ` (${assetEditSubType})` : ''}` : 'ไม่ระบุ'
+        if (originalAssetType !== assetEditType || originalAssetSubType !== assetEditSubType) {
+          changes.push(`ประเภท: ${oldType} → ${newType}`)
+        }
+        
         logAdminAction({
           user,
           action: 'edit',
           type: 'equipment',
           itemName: assetEditNameThai,
-          details: `Changed name from "${selectedEquipmentId}" to "${newFullName}"`
+          details: changes.length > 0 ? changes.join(', ') : `อัปเดตครุภัณฑ์ (${assetIdsForItem.length} รายการ)`
         })
       }
 
@@ -510,6 +668,8 @@ export default function AdminManageEquipment() {
       setEditingCodeId(null)
       setEditingCodeValue("")
       setAssetEditPicture(undefined)
+      setAssetEditType("")
+      setAssetEditSubType("")
       setSuccessMessage("บันทึกการเปลี่ยนแปลงสำเร็จ!")
       setShowSuccessModal(true)
     } catch (error) {
@@ -525,6 +685,8 @@ export default function AdminManageEquipment() {
     setEditingCodeId(null)
     setEditingCodeValue("")
     setAssetEditPicture(undefined)
+    setAssetEditType("")
+    setAssetEditSubType("")
   }
 
   const handleAddStockSubmitClick = () => {
@@ -597,6 +759,12 @@ export default function AdminManageEquipment() {
         return
       }
       
+      // Check for empty IDs
+      if (addStockForm.assetIds.some(id => !id.trim())) {
+        alert("รหัสอุปกรณ์ต้องไม่เป็นค่าว่าง")
+        return
+      }
+      
       // Check for duplicate IDs
       if (new Set(addStockForm.assetIds).size !== addStockForm.assetIds.length) {
         alert("รหัสอุปกรณ์ต้องไม่ซ้ำกัน")
@@ -654,6 +822,20 @@ export default function AdminManageEquipment() {
             ? { ...item, quantity: item.quantity + parseInt(addStockForm.quantity) }
             : item
         ))
+      }
+      
+      // Log admin action for adding stock
+      if (user) {
+        const isAssetCategory = addStockForm.equipmentCategory === "asset"
+        logAdminAction({
+          user,
+          action: 'update',
+          type: 'equipment',
+          itemName: addStockForm.equipmentName,
+          details: isAssetCategory 
+            ? `เพิ่มสต๊อกครุภัณฑ์: ${addStockForm.assetIds.length} รายการ (รหัส: ${addStockForm.assetIds.join(', ')})`
+            : `เพิ่มสต๊อก: +${addStockForm.quantity} ${existingUnit}`
+        })
       }
       
       setShowAddStockConfirmModal(false)
@@ -983,53 +1165,70 @@ export default function AdminManageEquipment() {
             {/* Modal Content */}
             <div className="p-8 text-center">
 
-              {/* Success Details Box */}
-              <div className="bg-gray-50 rounded-lg p-6 mb-6 text-left">
-                {/* Equipment Name */}
-                <div className="mb-4">
-                  <p className="text-xs text-gray-600 mb-1">อุปกรณ์ที่เพิ่ม</p>
-                  <p className="text-sm font-semibold text-gray-800">
-                    {addEquipmentForm.nameThai ? (
-                      <>
-                        {addEquipmentForm.nameThai}
-                        {addEquipmentForm.nameEnglish && ` (${addEquipmentForm.nameEnglish})`}
-                      </>
-                    ) : (
-                      addStockForm.equipmentName
-                    )}
-                  </p>
-                </div>
-
-                {/* Quantity */}
-                <div className="mb-4">
-                  <p className="text-xs text-gray-600 mb-1">จำนวน</p>
-                  <p className="text-sm font-semibold text-gray-800">
-                    {addEquipmentForm.quantity || addStockForm.quantity} {addEquipmentForm.unit || equipment.find(e => e.id === addStockForm.equipmentId)?.unit || "ชิ้น"}
-                  </p>
-                </div>
-
-                {/* Date - Only for consumables in stock form */}
-                {addStockForm.equipmentCategory !== "asset" && !addEquipmentForm.nameThai && (
+              {/* Show item name for asset edit/delete operations */}
+              {assetEditNameThai && !addEquipmentForm.nameThai && !addStockForm.equipmentName && (
+                <div className="bg-gray-50 rounded-lg p-6 mb-6 text-left">
                   <div>
-                    <p className="text-xs text-gray-600 mb-1">วันที่รับเข้า</p>
-                    <p className="text-sm font-semibold text-gray-800">{addStockForm.date}</p>
+                    <p className="text-xs text-gray-600 mb-1">ชื่ออุปกรณ์</p>
+                    <p className="text-sm font-semibold text-gray-800">
+                      {assetEditNameThai}
+                      {assetEditNameEnglish && ` (${assetEditNameEnglish})`}
+                    </p>
                   </div>
-                )}
+                </div>
+              )}
 
-                {/* Equipment IDs - Only for assets in new equipment form */}
-                {addEquipmentForm.category === "asset" && addEquipmentForm.ids.length > 0 && (
-                  <div>
-                    <p className="text-xs text-gray-600 mb-1">รหัสอุปกรณ์ที่เพิ่ม</p>
-                    <p className="text-sm font-semibold text-gray-800">{addEquipmentForm.ids.join(", ")}</p>
+              {/* Success Details Box - Show for add equipment or add stock actions */}
+              {(addEquipmentForm.nameThai || addStockForm.equipmentName) && (
+                <div className="bg-gray-50 rounded-lg p-6 mb-6 text-left">
+                  {/* Equipment Name */}
+                  <div className="mb-4">
+                    <p className="text-xs text-gray-600 mb-1">อุปกรณ์ที่เพิ่ม</p>
+                    <p className="text-sm font-semibold text-gray-800">
+                      {addEquipmentForm.nameThai ? (
+                        <>
+                          {addEquipmentForm.nameThai}
+                          {addEquipmentForm.nameEnglish && ` (${addEquipmentForm.nameEnglish})`}
+                        </>
+                      ) : (
+                        addStockForm.equipmentName
+                      )}
+                    </p>
                   </div>
-                )}
-              </div>
+
+                  {/* Quantity */}
+                  <div className="mb-4">
+                    <p className="text-xs text-gray-600 mb-1">จำนวน</p>
+                    <p className="text-sm font-semibold text-gray-800">
+                      {addEquipmentForm.quantity || addStockForm.quantity} {addEquipmentForm.unit || equipment.find(e => e.id === addStockForm.equipmentId)?.unit || "ชิ้น"}
+                    </p>
+                  </div>
+
+                  {/* Date - Only for consumables in stock form */}
+                  {addStockForm.equipmentCategory !== "asset" && !addEquipmentForm.nameThai && (
+                    <div>
+                      <p className="text-xs text-gray-600 mb-1">วันที่รับเข้า</p>
+                      <p className="text-sm font-semibold text-gray-800">{addStockForm.date}</p>
+                    </div>
+                  )}
+
+                  {/* Equipment IDs - Only for assets in new equipment form */}
+                  {addEquipmentForm.category === "asset" && addEquipmentForm.ids.length > 0 && (
+                    <div>
+                      <p className="text-xs text-gray-600 mb-1">รหัสอุปกรณ์ที่เพิ่ม</p>
+                      <p className="text-sm font-semibold text-gray-800">{addEquipmentForm.ids.join(", ")}</p>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Close Button */}
               <button
                 onClick={() => {
                   setShowSuccessModal(false)
                   setSelectedAssetIdToDelete("")
+                  setAssetEditNameThai("")
+                  setAssetEditNameEnglish("")
                   setAddStockForm({
                     equipmentId: "",
                     equipmentName: "",
@@ -1073,6 +1272,47 @@ export default function AdminManageEquipment() {
                   <option value="asset">ครุภัณฑ์</option>
                 </select>
               </div>
+
+              {/* Equipment Type Dropdown */}
+              <div>
+                <div className="flex justify-between items-center mb-2">
+                  <label className="text-xs font-semibold text-gray-700">ประเภทอุปกรณ์</label>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddTypeModal(true)}
+                    className="text-xs text-orange-500 hover:text-orange-600 font-medium"
+                  >
+                    + เพิ่มประเภทใหม่
+                  </button>
+                </div>
+                <select
+                  value={addEquipmentForm.equipmentType}
+                  onChange={(e) => setAddEquipmentForm({ ...addEquipmentForm, equipmentType: e.target.value, equipmentSubType: "" })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-full text-sm focus:outline-none focus:border-orange-500"
+                >
+                  <option value="">เลือกประเภท</option>
+                  {Object.keys(equipmentTypes).map((type) => (
+                    <option key={type} value={type}>{type}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Equipment SubType Dropdown (if available) */}
+              {addEquipmentForm.equipmentType && equipmentTypes[addEquipmentForm.equipmentType]?.length > 0 && (
+                <div>
+                  <label className="text-xs font-semibold text-gray-700 block mb-2">ประเภทย่อย</label>
+                  <select
+                    value={addEquipmentForm.equipmentSubType}
+                    onChange={(e) => setAddEquipmentForm({ ...addEquipmentForm, equipmentSubType: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-full text-sm focus:outline-none focus:border-orange-500"
+                  >
+                    <option value="">เลือกประเภทย่อย</option>
+                    {equipmentTypes[addEquipmentForm.equipmentType].map((subType) => (
+                      <option key={subType} value={subType}>{subType}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               {/* Equipment Name Thai Field */}
               <div>
@@ -1263,6 +1503,47 @@ export default function AdminManageEquipment() {
                 />
               </div>
 
+              {/* Equipment Type Dropdown */}
+              <div>
+                <div className="flex justify-between items-center mb-2">
+                  <label className="text-xs font-semibold text-gray-700">ประเภทอุปกรณ์</label>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddTypeModal(true)}
+                    className="text-xs text-orange-500 hover:text-orange-600 font-medium"
+                  >
+                    + เพิ่มประเภทใหม่
+                  </button>
+                </div>
+                <select
+                  value={assetEditType}
+                  onChange={(e) => { setAssetEditType(e.target.value); setAssetEditSubType(""); }}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-full text-sm focus:outline-none focus:border-orange-500"
+                >
+                  <option value="">เลือกประเภท</option>
+                  {Object.keys(equipmentTypes).map((type) => (
+                    <option key={type} value={type}>{type}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Equipment SubType Dropdown (if available) */}
+              {assetEditType && equipmentTypes[assetEditType]?.length > 0 && (
+                <div>
+                  <label className="text-xs font-semibold text-gray-700 block mb-2">ประเภทย่อย</label>
+                  <select
+                    value={assetEditSubType}
+                    onChange={(e) => setAssetEditSubType(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-full text-sm focus:outline-none focus:border-orange-500"
+                  >
+                    <option value="">เลือกประเภทย่อย</option>
+                    {equipmentTypes[assetEditType].map((subType) => (
+                      <option key={subType} value={subType}>{subType}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               {/* Picture Section */}
               <div>
                 <label className="text-xs font-semibold text-gray-700 block mb-2">รูปภาพอุปกรณ์</label>
@@ -1388,17 +1669,44 @@ export default function AdminManageEquipment() {
                           {isEditing ? (
                             <>
                               <button
-                                onClick={() => {
+                                onClick={async () => {
                                   // Save the edit
                                   if (editingCodeValue.trim() && editingCodeValue !== codeId) {
-                                    // Update equipment list
-                                    setEquipment(equipment.map(item =>
-                                      item.id === codeId ? { ...item, id: editingCodeValue.trim() } : item
-                                    ))
-                                    // Update assetIdsForItem
-                                    setAssetIdsForItem(assetIdsForItem.map(id =>
-                                      id === codeId ? editingCodeValue.trim() : id
-                                    ))
+                                    try {
+                                      // Update Firestore
+                                      const querySnapshot = await getDocs(collection(db, "equipment"))
+                                      for (const docSnap of querySnapshot.docs) {
+                                        if (docSnap.data().id === codeId) {
+                                          await updateDoc(doc(db, "equipment", docSnap.id), {
+                                            id: editingCodeValue.trim()
+                                          })
+                                          break
+                                        }
+                                      }
+                                      
+                                      // Update equipment list
+                                      setEquipment(equipment.map(item =>
+                                        item.id === codeId ? { ...item, id: editingCodeValue.trim() } : item
+                                      ))
+                                      // Update assetIdsForItem
+                                      setAssetIdsForItem(assetIdsForItem.map(id =>
+                                        id === codeId ? editingCodeValue.trim() : id
+                                      ))
+                                      
+                                      // Log admin action
+                                      if (user) {
+                                        logAdminAction({
+                                          user,
+                                          action: 'edit',
+                                          type: 'equipment',
+                                          itemName: assetEditNameThai,
+                                          details: `แก้ไขรหัสครุภัณฑ์: "${codeId}" → "${editingCodeValue.trim()}"`
+                                        })
+                                      }
+                                    } catch (error) {
+                                      console.error("Error updating asset code:", error)
+                                      alert("เกิดข้อผิดพลาดในการบันทึกข้อมูล")
+                                    }
                                   }
                                   setEditingCodeId(null)
                                   setEditingCodeValue("")
@@ -1586,6 +1894,47 @@ export default function AdminManageEquipment() {
                   placeholder="(optional)"
                 />
               </div>
+
+              {/* Equipment Type Dropdown */}
+              <div>
+                <div className="flex justify-between items-center mb-2">
+                  <label className="text-xs font-semibold text-gray-700">ประเภทอุปกรณ์</label>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddTypeModal(true)}
+                    className="text-xs text-orange-500 hover:text-orange-600 font-medium"
+                  >
+                    + เพิ่มประเภทใหม่
+                  </button>
+                </div>
+                <select
+                  value={editForm.equipmentType}
+                  onChange={(e) => setEditForm({ ...editForm, equipmentType: e.target.value, equipmentSubType: "" })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-full text-sm focus:outline-none focus:border-orange-500"
+                >
+                  <option value="">เลือกประเภท</option>
+                  {Object.keys(equipmentTypes).map((type) => (
+                    <option key={type} value={type}>{type}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Equipment SubType Dropdown (if available) */}
+              {editForm.equipmentType && equipmentTypes[editForm.equipmentType]?.length > 0 && (
+                <div>
+                  <label className="text-xs font-semibold text-gray-700 block mb-2">ประเภทย่อย</label>
+                  <select
+                    value={editForm.equipmentSubType}
+                    onChange={(e) => setEditForm({ ...editForm, equipmentSubType: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-full text-sm focus:outline-none focus:border-orange-500"
+                  >
+                    <option value="">เลือกประเภทย่อย</option>
+                    {equipmentTypes[editForm.equipmentType].map((subType) => (
+                      <option key={subType} value={subType}>{subType}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               {/* Quantity */}
               <div>
@@ -1830,6 +2179,108 @@ export default function AdminManageEquipment() {
                 className="flex-1 py-2 bg-orange-500 text-white rounded font-semibold hover:bg-orange-600 transition"
               >
                 ตกลง
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== ADD EQUIPMENT TYPE MODAL ===== */}
+      {showAddTypeModal && (
+        <div className="fixed inset-0 backdrop-blur-xs bg-opacity-50 flex items-center justify-center z-[60] px-4">
+          <div className="bg-white rounded-lg overflow-hidden w-full max-w-md max-h-[90vh] overflow-y-auto">
+            {/* Modal Header */}
+            <div className="bg-orange-500 text-white p-4 text-center font-semibold sticky top-0">
+              เพิ่มประเภทอุปกรณ์ใหม่
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6 flex flex-col gap-4">
+              {/* Type Name */}
+              <div>
+                <label className="text-xs font-semibold text-gray-700 block mb-2">ชื่อประเภท</label>
+                <input
+                  type="text"
+                  value={newTypeName}
+                  onChange={(e) => setNewTypeName(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-full text-sm focus:outline-none focus:border-orange-500"
+                  placeholder="เช่น งานไฟฟ้า, เครื่องมือวัด"
+                />
+              </div>
+
+              {/* SubTypes */}
+              <div>
+                <label className="text-xs font-semibold text-gray-700 block mb-2">ประเภทย่อย (ถ้ามี)</label>
+                <div className="flex gap-2 mb-2">
+                  <input
+                    type="text"
+                    value={newSubTypeInput}
+                    onChange={(e) => setNewSubTypeInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && newSubTypeInput.trim()) {
+                        e.preventDefault()
+                        setNewTypeSubTypes([...newTypeSubTypes, newSubTypeInput.trim()])
+                        setNewSubTypeInput("")
+                      }
+                    }}
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-full text-sm focus:outline-none focus:border-orange-500"
+                    placeholder="พิมพ์แล้วกด Enter"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (newSubTypeInput.trim()) {
+                        setNewTypeSubTypes([...newTypeSubTypes, newSubTypeInput.trim()])
+                        setNewSubTypeInput("")
+                      }
+                    }}
+                    className="px-4 py-2 bg-orange-500 text-white rounded-full text-sm font-medium hover:bg-orange-600 transition"
+                  >
+                    เพิ่ม
+                  </button>
+                </div>
+                
+                {/* SubType List */}
+                {newTypeSubTypes.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {newTypeSubTypes.map((subType, index) => (
+                      <span
+                        key={index}
+                        className="inline-flex items-center gap-1 px-3 py-1 bg-orange-100 text-orange-700 rounded-full text-sm"
+                      >
+                        {subType}
+                        <button
+                          type="button"
+                          onClick={() => setNewTypeSubTypes(newTypeSubTypes.filter((_, i) => i !== index))}
+                          className="text-orange-500 hover:text-orange-700 font-bold"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Modal Buttons */}
+            <div className="flex gap-3 p-6 pt-0">
+              <button
+                onClick={() => {
+                  setShowAddTypeModal(false)
+                  setNewTypeName("")
+                  setNewTypeSubTypes([])
+                  setNewSubTypeInput("")
+                }}
+                className="flex-1 py-2 border border-gray-300 text-gray-700 rounded-full font-medium hover:bg-gray-100 transition"
+              >
+                ยกเลิก
+              </button>
+              <button
+                onClick={handleAddNewType}
+                className="flex-1 py-2 bg-orange-500 text-white rounded-full font-semibold hover:bg-orange-600 transition"
+              >
+                บันทึก
               </button>
             </div>
           </div>

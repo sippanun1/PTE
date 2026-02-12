@@ -11,6 +11,7 @@ export interface BorrowItem {
 
 export interface BorrowTransaction {
   borrowId: string
+  userId: string
   userEmail: string
   userName: string
   userIdNumber?: string
@@ -19,6 +20,7 @@ export interface BorrowTransaction {
   borrowDate: string
   borrowTime: string
   expectedReturnDate: string
+  expectedReturnTime?: string
   actualReturnDate?: string
   returnTime?: string
   conditionBeforeBorrow: string
@@ -29,6 +31,16 @@ export interface BorrowTransaction {
   status: "scheduled" | "borrowed" | "returned" | "cancelled"
   notes?: string
   timestamp: number
+  // Confirmation fields (when admin gives equipment)
+  confirmedBy?: string
+  confirmedByEmail?: string
+  confirmedAt?: number
+  // Cancellation fields
+  cancelledBy?: string
+  cancelledByEmail?: string
+  cancelledAt?: number
+  cancelReason?: string
+  // Return timestamp
   returnTimestamp?: number
 }
 
@@ -45,24 +57,27 @@ export async function logBorrowTransaction(
   conditionBeforeBorrow: string,
   notes?: string,
   userName?: string,
-  userIdNumber?: string
+  userIdNumber?: string,
+  expectedReturnTime?: string
 ) {
   try {
     const borrowId = `borrow-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
     
     const transaction: BorrowTransaction = {
       borrowId,
+      userId: user.uid,
       userEmail: user.email || "",
       userName: userName || user.displayName || "Unknown",
-      userIdNumber: userIdNumber,
+      userIdNumber: userIdNumber || "",
       borrowType,
       equipmentItems,
       borrowDate,
       borrowTime,
       expectedReturnDate,
+      expectedReturnTime: expectedReturnTime || "",
       conditionBeforeBorrow,
-      status: "borrowed",
-      notes,
+      status: "scheduled", // Waiting for admin to confirm and give equipment
+      notes: notes || "",
       timestamp: Date.now()
     }
 
@@ -115,6 +130,82 @@ export async function logReturnTransaction(
     )
   } catch (error) {
     console.error("Error logging return transaction:", error)
+    throw error
+  }
+}
+
+/**
+ * Admin confirms and gives equipment to user
+ * Changes status from "scheduled" to "borrowed"
+ */
+export async function confirmBorrowTransaction(
+  borrowId: string,
+  confirmedBy: User,
+  confirmedByName?: string,
+  notes?: string
+) {
+  try {
+    const borrowDocRef = doc(db, "borrowHistory", borrowId)
+    const borrowDoc = await getDoc(borrowDocRef)
+
+    if (!borrowDoc.exists()) {
+      throw new Error(`Borrow transaction with ID ${borrowId} not found`)
+    }
+
+    const currentData = borrowDoc.data()
+    if (currentData.status !== "scheduled") {
+      throw new Error(`Transaction is not in scheduled status. Current status: ${currentData.status}`)
+    }
+
+    // Update status to borrowed
+    await setDoc(
+      borrowDocRef,
+      {
+        status: "borrowed",
+        confirmedBy: confirmedByName || confirmedBy?.displayName || "Admin",
+        confirmedByEmail: confirmedBy?.email,
+        confirmedAt: Date.now(),
+        notes: notes || currentData.notes
+      },
+      { merge: true }
+    )
+  } catch (error) {
+    console.error("Error confirming borrow transaction:", error)
+    throw error
+  }
+}
+
+/**
+ * Admin cancels a borrow request
+ */
+export async function cancelBorrowTransaction(
+  borrowId: string,
+  cancelledBy: User,
+  cancelledByName?: string,
+  reason?: string
+) {
+  try {
+    const borrowDocRef = doc(db, "borrowHistory", borrowId)
+    const borrowDoc = await getDoc(borrowDocRef)
+
+    if (!borrowDoc.exists()) {
+      throw new Error(`Borrow transaction with ID ${borrowId} not found`)
+    }
+
+    // Update status to cancelled
+    await setDoc(
+      borrowDocRef,
+      {
+        status: "cancelled",
+        cancelledBy: cancelledByName || cancelledBy?.displayName || "Admin",
+        cancelledByEmail: cancelledBy?.email,
+        cancelledAt: Date.now(),
+        cancelReason: reason || ""
+      },
+      { merge: true }
+    )
+  } catch (error) {
+    console.error("Error cancelling borrow transaction:", error)
     throw error
   }
 }

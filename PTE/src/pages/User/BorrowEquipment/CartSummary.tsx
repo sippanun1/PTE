@@ -1,6 +1,9 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
+import { doc, getDoc } from "firebase/firestore"
+import { db } from "../../../firebase/firebase"
 import Header from "../../../components/Header"
+import { useAuth } from "../../../hooks/useAuth"
 import type { SelectedEquipment } from "../../../App"
 
 interface CartSummaryProps {
@@ -10,7 +13,61 @@ interface CartSummaryProps {
 
 export default function CartSummary({ cartItems, setCartItems }: CartSummaryProps) {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [items, setItems] = useState<SelectedEquipment[]>(cartItems)
+  const [fullName, setFullName] = useState<string>("")
+
+  // Get borrow info from sessionStorage
+  const borrowInfo = JSON.parse(sessionStorage.getItem("borrowInfo") || "{}")
+  const expectedReturnTime = borrowInfo.expectedReturnTime || ""
+  const borrowType = borrowInfo.borrowType || ""
+
+  const getBorrowTypeLabel = () => {
+    switch (borrowType) {
+      case "during-class":
+        return "ยืมในคาบเรียน"
+      case "teaching":
+        return "ยืมใช้สอน"
+      case "outside":
+        return "ยืมนอกคาบเรียน"
+      default:
+        return "ยืมอุปกรณ์"
+    }
+  }
+
+  // Fetch user's fullName from Firestore
+  useEffect(() => {
+    const fetchUserFullName = async () => {
+      if (user) {
+        try {
+          const userDoc = await getDoc(doc(db, "users", user.uid))
+          if (userDoc.exists()) {
+            setFullName(userDoc.data().fullName || "")
+          }
+        } catch (error) {
+          console.error("Error fetching user fullName:", error)
+        }
+      }
+    }
+    fetchUserFullName()
+  }, [user])
+
+  // Get current date and return date (same day)
+  const today = new Date()
+  const borrowDate = today.toLocaleDateString("th-TH", {
+    day: "numeric",
+    month: "short",
+    year: "2-digit"
+  })
+  const borrowTime = today.toLocaleTimeString("th-TH", {
+    hour: "2-digit",
+    minute: "2-digit"
+  })
+  const returnDate = today.toLocaleDateString("th-TH", {
+    day: "numeric",
+    month: "short",
+    year: "2-digit"
+  })
 
   const handleAddQuantity = (equipmentId: string) => {
     setItems(prev =>
@@ -62,19 +119,25 @@ export default function CartSummary({ cartItems, setCartItems }: CartSummaryProp
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
                 <span className="text-lg">👤</span>
-                <span className="text-sm text-gray-700">User (ชื่อ-สกุล)</span>
+                <span className="text-sm text-gray-700">{fullName || user?.email || "ผู้ใช้"}</span>
+              </div>
+            </div>
+            <div className="flex items-center justify-between mb-2 text-xs text-gray-600">
+              <div className="flex items-center gap-2">
+                <span>📦</span>
+                <span>ประเภทการยืม: {getBorrowTypeLabel()}</span>
               </div>
             </div>
             <div className="flex items-center justify-between mb-2 text-xs text-gray-600">
               <div className="flex items-center gap-2">
                 <span>📅</span>
-                <span>30/05/68 (วันที่ยืม)</span>
+                <span>ยืมวันที่ {borrowDate} เวลา {borrowTime} น.</span>
               </div>
             </div>
             <div className="flex items-center justify-between text-xs">
               <div className="flex items-center gap-2">
                 <span>📋</span>
-                <span className="text-blue-600 font-medium">30/05/68 (กำหนดวันคืน)</span>
+                <span className="text-blue-600 font-medium">กำหนดคืน {returnDate} เวลา {expectedReturnTime || borrowTime} น.</span>
               </div>
             </div>
           </div>
@@ -93,10 +156,17 @@ export default function CartSummary({ cartItems, setCartItems }: CartSummaryProp
                         {item.name}
                       </h3>
                       <p className="text-xs text-green-600 font-medium mt-1">
-                        {item.code}
+                        {item.equipmentType ? (
+                          <>
+                            {item.equipmentType}
+                            {item.equipmentSubType && ` (${item.equipmentSubType})`}
+                          </>
+                        ) : (
+                          "ไม่ระบุประเภท"
+                        )}
                       </p>
                       <p className="text-xs text-gray-500 mt-1">
-                        สต็อค {item.available} ชิ้น
+                        สต็อค {item.available} {item.unit}
                       </p>
                     </div>
 

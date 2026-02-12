@@ -28,7 +28,19 @@ import UserBorrowReturnHistory from './pages/User/BorrowReturnHistory'
 import AdminManagement from './pages/Admin/AdminManagement'
 import AdminHistory from './pages/Admin/AdminHistory'
 import ProtectedRoute from './components/ProtectedRoute'
-import type { Equipment } from './data/equipment'
+
+export interface Equipment {
+  id: string
+  name: string
+  category: "consumable" | "asset" | "main"
+  quantity: number
+  unit: string
+  picture?: string
+  inStock: boolean
+  available: number
+  equipmentType?: string
+  equipmentSubType?: string
+}
 
 export interface SelectedEquipment extends Equipment {
   selectedQuantity: number

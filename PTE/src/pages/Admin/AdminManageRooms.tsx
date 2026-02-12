@@ -1,5 +1,7 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from "firebase/firestore"
+import { db } from "../../firebase/firebase"
 import Header from "../../components/Header"
 import { useAuth } from "../../hooks/useAuth"
 import { logAdminAction } from "../../utils/adminLogger"
@@ -52,13 +54,8 @@ interface RoomFormData {
 export default function AdminManageRooms() {
   const navigate = useNavigate()
   const { user } = useAuth()
-  const [rooms, setRooms] = useState<Room[]>([
-    { id: "1", code: "CB8720", type: "ห้องเรียน", status: "ไม่ว่าง" },
-    { id: "2", code: "CB8721", type: "ห้องปฏิบัติการ", status: "ว่าง" },
-    { id: "3", code: "CB8722", type: "ห้องประชุม", status: "ว่าง" },
-    { id: "4", code: "CB8723", type: "ห้องเรียน", status: "ไม่ว่าง" },
-    { id: "5", code: "CB8724", type: "ห้องปฏิบัติการ", status: "ว่าง" },
-  ])
+  const [rooms, setRooms] = useState<Room[]>([])
+  const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
   const [showModal, setShowModal] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
@@ -91,45 +88,53 @@ export default function AdminManageRooms() {
   })
   const [originalFormData, setOriginalFormData] = useState<RoomFormData | null>(null)
 
-  // Mock room bookings - replace with Firebase
-  const [roomBookings, setRoomBookings] = useState<RoomBooking[]>([
-    {
-      id: "b1",
-      roomId: "1",
-      roomCode: "CB8720",
-      userName: "อาจารย์สมชาย ใจดี",
-      userId: "user1",
-      date: "2026-02-11",
-      startTime: "09:00",
-      endTime: "12:00",
-      purpose: "สอนวิชา Computer Programming",
-      status: "upcoming"
-    },
-    {
-      id: "b2",
-      roomId: "1",
-      roomCode: "CB8720",
-      userName: "ผศ.ดร.วิชัย นักวิจัย",
-      userId: "user4",
-      date: "2026-02-12",
-      startTime: "14:00",
-      endTime: "17:00",
-      purpose: "สัมมนาวิชาการ",
-      status: "upcoming"
-    },
-    {
-      id: "b3",
-      roomId: "2",
-      roomCode: "CB8721",
-      userName: "อาจารย์สมหญิง รักเรียน",
-      userId: "user2",
-      date: "2026-02-13",
-      startTime: "13:00",
-      endTime: "16:00",
-      purpose: "สอนวิชา Database Systems",
-      status: "upcoming"
+  const [roomBookings, setRoomBookings] = useState<RoomBooking[]>([])
+
+  // Load rooms and bookings from Firebase
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        // Load rooms
+        const roomsSnapshot = await getDocs(collection(db, "rooms"))
+        const roomsList: Room[] = []
+        roomsSnapshot.forEach((doc) => {
+          const data = doc.data()
+          roomsList.push({
+            id: doc.id,
+            code: data.code || "",
+            type: data.type || "",
+            status: data.status || "ว่าง"
+          })
+        })
+        setRooms(roomsList)
+
+        // Load room bookings
+        const bookingsSnapshot = await getDocs(collection(db, "roomBookings"))
+        const bookingsList: RoomBooking[] = []
+        bookingsSnapshot.forEach((doc) => {
+          const data = doc.data()
+          bookingsList.push({
+            id: doc.id,
+            roomId: data.roomId || "",
+            roomCode: data.roomCode || "",
+            userName: data.userName || "",
+            userId: data.userId || "",
+            date: data.date || "",
+            startTime: data.startTime || "",
+            endTime: data.endTime || "",
+            purpose: data.purpose || "",
+            status: data.status || "upcoming"
+          })
+        })
+        setRoomBookings(bookingsList)
+      } catch (error) {
+        console.error("Error loading rooms data:", error)
+      } finally {
+        setLoading(false)
+      }
     }
-  ])
+    loadData()
+  }, [])
 
   // Get upcoming bookings count for a room
   const getUpcomingBookingsForRoom = (roomId: string) => {
@@ -278,51 +283,67 @@ export default function AdminManageRooms() {
     return `Room code: ${formData.code} | ${changes.join(' | ')}`
   }
 
-  const handleConfirmSave = () => {
-    if (editingRoomId) {
-      // Edit existing room
-      const finalType = formData.type === "ห้องอื่นๆ" ? formData.customType : formData.type
-      setRooms(rooms.map(room =>
-        room.id === editingRoomId
-          ? { ...room, code: formData.code, type: finalType }
-          : room
-      ))
-      
-      // Log admin action for edit with detailed changes
-      if (user) {
-        logAdminAction({
-          user,
-          action: 'update',
-          type: 'room',
-          itemName: finalType,
-          details: buildChangeDetails()
+  const handleConfirmSave = async () => {
+    const finalType = formData.type === "ห้องอื่นๆ" ? formData.customType : formData.type
+    
+    try {
+      if (editingRoomId) {
+        // Edit existing room in Firebase
+        await updateDoc(doc(db, "rooms", editingRoomId), {
+          code: formData.code,
+          type: finalType
         })
-      }
-      setOriginalFormData(null)
-    } else {
-      // Add new room
-      const finalType = formData.type === "ห้องอื่นๆ" ? formData.customType : formData.type
-      const newRoom: Room = {
-        id: (rooms.length + 1).toString(),
-        code: formData.code,
-        type: finalType,
-        status: "ว่าง"
-      }
-      setRooms([...rooms, newRoom])
-      
-      // Log admin action for add
-      if (user) {
-        logAdminAction({
-          user,
-          action: 'add',
-          type: 'room',
-          itemName: finalType,
-          details: `Room code: ${formData.code}`
+        
+        setRooms(rooms.map(room =>
+          room.id === editingRoomId
+            ? { ...room, code: formData.code, type: finalType }
+            : room
+        ))
+        
+        // Log admin action for edit with detailed changes
+        if (user) {
+          logAdminAction({
+            user,
+            action: 'update',
+            type: 'room',
+            itemName: finalType,
+            details: buildChangeDetails()
+          })
+        }
+        setOriginalFormData(null)
+      } else {
+        // Add new room to Firebase
+        const docRef = await addDoc(collection(db, "rooms"), {
+          code: formData.code,
+          type: finalType,
+          status: "ว่าง"
         })
+        
+        const newRoom: Room = {
+          id: docRef.id,
+          code: formData.code,
+          type: finalType,
+          status: "ว่าง"
+        }
+        setRooms([...rooms, newRoom])
+        
+        // Log admin action for add
+        if (user) {
+          logAdminAction({
+            user,
+            action: 'add',
+            type: 'room',
+            itemName: finalType,
+            details: `Room code: ${formData.code}`
+          })
+        }
       }
+      setShowModal(false)
+      setShowConfirm(false)
+    } catch (error) {
+      console.error("Error saving room:", error)
+      alert("เกิดข้อผิดพลาดในการบันทึกข้อมูล")
     }
-    setShowModal(false)
-    setShowConfirm(false)
   }
 
   const handleDeleteRoom = (roomId: string) => {
@@ -330,35 +351,46 @@ export default function AdminManageRooms() {
     setShowDeleteConfirm(true)
   }
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (deletingRoomId) {
       const deletedRoom = rooms.find(room => room.id === deletingRoomId)
       const affectedBookings = getUpcomingBookingsForRoom(deletingRoomId)
       
-      // Cancel all upcoming bookings for this room
-      if (affectedBookings.length > 0) {
-        setRoomBookings(prev => prev.map(booking => 
-          booking.roomId === deletingRoomId && booking.status === "upcoming"
-            ? { ...booking, status: "cancelled" as const }
-            : booking
-        ))
-      }
-      
-      // Delete the room
-      setRooms(rooms.filter(room => room.id !== deletingRoomId))
-      
-      // Log admin action
-      if (user && deletedRoom) {
-        const bookingInfo = affectedBookings.length > 0 
-          ? ` | ยกเลิกการจอง ${affectedBookings.length} รายการ`
-          : ''
-        logAdminAction({
-          user,
-          action: 'delete',
-          type: 'room',
-          itemName: deletedRoom.type,
-          details: `Room code: ${deletedRoom.code}${bookingInfo}`
-        })
+      try {
+        // Cancel all upcoming bookings for this room in Firebase
+        if (affectedBookings.length > 0) {
+          for (const booking of affectedBookings) {
+            await updateDoc(doc(db, "roomBookings", booking.id), {
+              status: "cancelled"
+            })
+          }
+          setRoomBookings(prev => prev.map(booking => 
+            booking.roomId === deletingRoomId && booking.status === "upcoming"
+              ? { ...booking, status: "cancelled" as const }
+              : booking
+          ))
+        }
+        
+        // Delete the room from Firebase
+        await deleteDoc(doc(db, "rooms", deletingRoomId))
+        setRooms(rooms.filter(room => room.id !== deletingRoomId))
+        
+        // Log admin action
+        if (user && deletedRoom) {
+          const bookingInfo = affectedBookings.length > 0 
+            ? ` | ยกเลิกการจอง ${affectedBookings.length} รายการ`
+            : ''
+          logAdminAction({
+            user,
+            action: 'delete',
+            type: 'room',
+            itemName: deletedRoom.type,
+            details: `Room code: ${deletedRoom.code}${bookingInfo}`
+          })
+        }
+      } catch (error) {
+        console.error("Error deleting room:", error)
+        alert("เกิดข้อผิดพลาดในการลบข้อมูล")
       }
     }
     setShowDeleteConfirm(false)
@@ -491,7 +523,11 @@ export default function AdminManageRooms() {
 
           {/* Rooms List */}
           <div className="w-full flex flex-col gap-3">
-            {filteredRooms.length > 0 ? (
+            {loading ? (
+              <div className="text-center py-8">
+                <p className="text-gray-500">กำลังโหลดข้อมูล...</p>
+              </div>
+            ) : filteredRooms.length > 0 ? (
               filteredRooms.map((room) => (
                 <div key={room.id} className="w-full grid grid-cols-4 gap-2 items-center text-xs border-b pb-3">
                   {/* Room Code */}

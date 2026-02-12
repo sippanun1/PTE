@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react"
 import { useNavigate, useParams } from "react-router-dom"
+import { collection, getDocs, doc, getDoc } from "firebase/firestore"
+import { db } from "../../firebase/firebase"
 import Header from "../../components/Header"
 
 interface Room {
@@ -30,86 +32,48 @@ export default function RoomSchedule() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // TODO: Fetch room data from Firebase
-    // For now, using mock data
+    // Fetch room data from Firebase
     const fetchRoomData = async () => {
       setLoading(true)
       
-      // Mock room - replace with Firebase fetch
-      const mockRoom: Room = {
-        id: roomId || "1",
-        code: "CB8720",
-        type: "ห้องเรียน",
-        status: "ไม่ว่าง"
-      }
-      
-      // Mock bookings - replace with Firebase fetch
-      const mockBookings: RoomBooking[] = [
-        {
-          id: "1",
-          roomId: roomId || "1",
-          userName: "อาจารย์สมชาย ใจดี",
-          userId: "user1",
-          date: "2026-02-10",
-          startTime: "09:00",
-          endTime: "12:00",
-          purpose: "สอนวิชา Computer Programming"
-        },
-        {
-          id: "2",
-          roomId: roomId || "1",
-          userName: "อาจารย์สมหญิง รักเรียน",
-          userId: "user2",
-          date: "2026-02-10",
-          startTime: "13:00",
-          endTime: "16:00",
-          purpose: "สอนวิชา Database Systems"
-        },
-        {
-          id: "3",
-          roomId: roomId || "1",
-          userName: "นายสมศักดิ์ เก่งมาก",
-          userId: "user3",
-          date: "2026-02-11",
-          startTime: "10:00",
-          endTime: "11:00",
-          purpose: "ประชุมกลุ่มโปรเจค"
-        },
-        {
-          id: "4",
-          roomId: roomId || "1",
-          userName: "ผศ.ดร.วิชัย นักวิจัย",
-          userId: "user4",
-          date: "2026-02-11",
-          startTime: "14:00",
-          endTime: "17:00",
-          purpose: "สัมมนาวิชาการ"
-        },
-        {
-          id: "5",
-          roomId: roomId || "1",
-          userName: "นางสาวพิมพ์ใจ ศึกษาดี",
-          userId: "user5",
-          date: "2026-02-12",
-          startTime: "09:00",
-          endTime: "10:30",
-          purpose: "นำเสนอโปรเจคจบ"
-        },
-        {
-          id: "6",
-          roomId: roomId || "1",
-          userName: "อาจารย์มานะ พัฒนา",
-          userId: "user6",
-          date: "2026-02-12",
-          startTime: "13:00",
-          endTime: "15:00",
-          purpose: "Workshop Python Programming"
+      try {
+        // Fetch room by ID
+        const roomDoc = await getDoc(doc(db, "rooms", roomId || ""))
+        if (roomDoc.exists()) {
+          const data = roomDoc.data()
+          setRoom({
+            id: roomDoc.id,
+            code: data.code || "",
+            type: data.type || "",
+            status: data.status || "ว่าง"
+          })
         }
-      ]
-      
-      setRoom(mockRoom)
-      setBookings(mockBookings.filter(b => b.roomId === roomId))
-      setLoading(false)
+        
+        // Fetch bookings for this room
+        const bookingsSnapshot = await getDocs(collection(db, "roomBookings"))
+        const roomBookings: RoomBooking[] = []
+        bookingsSnapshot.forEach((doc) => {
+          const data = doc.data()
+          // Filter by roomCode matching room.code or roomId matching roomId
+          if (data.roomCode === roomDoc.data()?.code || data.roomId === roomId) {
+            roomBookings.push({
+              id: doc.id,
+              roomId: data.roomId || roomId || "",
+              userName: data.userName || "",
+              userId: data.userId || "",
+              date: data.date || "",
+              startTime: data.startTime || "",
+              endTime: data.endTime || "",
+              purpose: data.purpose || ""
+            })
+          }
+        })
+        setBookings(roomBookings)
+      } catch (error) {
+        console.error("Error loading room schedule:", error)
+      } finally {
+        setLoading(false)
+      }
     }
 
     fetchRoomData()

@@ -3,12 +3,17 @@ import { useNavigate } from "react-router-dom"
 import Header from "../../components/Header"
 import { collection, getDocs, query, orderBy } from "firebase/firestore"
 import { db } from "../../firebase/firebase"
+import { useAuth } from "../../hooks/useAuth"
+import { logAdminAction } from "../../utils/adminLogger"
 import type { BorrowTransaction } from "../../utils/borrowReturnLogger"
+import { confirmBorrowTransaction, cancelBorrowTransaction } from "../../utils/borrowReturnLogger"
 
 export default function BorrowReturnHistory() {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [transactions, setTransactions] = useState<BorrowTransaction[]>([])
   const [loading, setLoading] = useState(true)
+  const [processingId, setProcessingId] = useState<string | null>(null)
   const [filter, setFilter] = useState<"all" | "scheduled" | "borrowed" | "returned" | "cancelled">("all")
   const [searchTerm, setSearchTerm] = useState("")
   const [borrowTypeFilter, setBorrowTypeFilter] = useState<"all" | "during-class" | "teaching" | "outside">("all")
@@ -352,122 +357,149 @@ export default function BorrowReturnHistory() {
               กำลังโหลด...
             </div>
           ) : filteredTransactions.length > 0 ? (
-            <div className="w-full flex flex-col gap-4">
-              {filteredTransactions.map((txn) => (
-                <div
-                  key={txn.borrowId}
-                  className="bg-gray-50 rounded-lg p-4 border border-gray-200"
-                >
-                  {/* Header: User and Status */}
-                  <div className="flex justify-between items-start mb-3">
-                    <div className="flex-1">
-                      <h3 className="text-sm font-semibold text-gray-800">
-                        {txn.userName}
-                      </h3>
-                      <p className="text-xs text-gray-600">{txn.userEmail}</p>
-                      {txn.userIdNumber && (
-                        <p className="text-xs text-gray-600">
-                          รหัส: {txn.userIdNumber}
-                        </p>
-                      )}
-                    </div>
-                    <span
-                      className={`
-                        px-3 py-1 rounded-full text-xs font-semibold
-                        ${getStatusColor(txn.status)}
-                      `}
-                    >
-                      {getStatusText(txn.status)}
-                    </span>
-                  </div>
-
-                  {/* Borrow Type */}
-                  <div className="mb-3 pb-3 border-b border-gray-300">
-                    <p className="text-xs text-gray-600 mb-1">ประเภทการยืม</p>
-                    <p className="text-sm font-medium text-orange-600">
-                      {getBorrowTypeText(txn.borrowType)}
-                    </p>
-                  </div>
-
-                  {/* Equipment Items */}
-                  <div className="mb-3 pb-3 border-b border-gray-300">
-                    <p className="text-xs text-gray-600 mb-2">อุปกรณ์</p>
-                    {txn.equipmentItems.map((item, idx) => (
-                      <div key={idx} className="text-xs mb-1 ml-2">
-                        <p className="text-gray-700">
-                          • {item.equipmentName}
-                          <span className="text-gray-600 ml-2">
-                            ({item.quantityBorrowed} ชิ้น)
-                          </span>
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Dates */}
-                  <div className="mb-3 pb-3 border-b border-gray-300">
-                    <div className="flex justify-between text-xs mb-2">
-                      <span className="text-gray-600">วันยืม:</span>
-                      <span className="text-gray-800 font-medium">
-                        {txn.borrowDate} {txn.borrowTime}
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-xs mb-2">
-                      <span className="text-gray-600">กำหนดคืน:</span>
-                      <span className="text-gray-800 font-medium">
-                        {txn.expectedReturnDate}
-                      </span>
-                    </div>
-                    {txn.actualReturnDate && (
-                      <div className="flex justify-between text-xs">
-                        <span className="text-gray-600">วันคืนจริง:</span>
-                        <span className="text-gray-800 font-medium">
-                          {txn.actualReturnDate} {txn.returnTime}
+            <div className="w-full overflow-x-auto bg-white rounded-lg shadow-sm border border-gray-200">
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-200">
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700">วันที่ยืม</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700">ผู้ยืม</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700">อุปกรณ์</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700">ประเภท</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700">กำหนดคืน</th>
+                    <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">สถานะ</th>
+                    <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700">ดำเนินการ</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredTransactions.map((txn) => (
+                    <tr key={txn.borrowId} className="border-b border-gray-200 hover:bg-gray-50">
+                      <td className="px-4 py-3 text-xs text-gray-900">
+                        <div className="font-medium">{txn.borrowDate}</div>
+                        <div className="text-gray-500">{txn.borrowTime}</div>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-gray-900">
+                        <div className="font-medium">{txn.userName}</div>
+                        <div className="text-gray-500">{txn.userEmail}</div>
+                        {txn.userIdNumber && <div className="text-gray-400">รหัส: {txn.userIdNumber}</div>}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-gray-900">
+                        {txn.equipmentItems.map((item, idx) => (
+                          <div key={idx} className="mb-1">
+                            <span className="font-medium">{item.equipmentName}</span>
+                            <span className="text-gray-500 ml-1">({item.quantityBorrowed} ชิ้น)</span>
+                          </div>
+                        ))}
+                      </td>
+                      <td className="px-4 py-3 text-xs">
+                        <span className="px-2 py-1 rounded bg-orange-100 text-orange-800 font-medium">
+                          {getBorrowTypeText(txn.borrowType)}
                         </span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Condition */}
-                  <div className="mb-3 pb-3 border-b border-gray-300">
-                    <p className="text-xs text-gray-600 mb-1">สภาพยืม</p>
-                    <p className="text-xs text-gray-800">
-                      {txn.conditionBeforeBorrow}
-                    </p>
-                    {txn.conditionOnReturn && (
-                      <>
-                        <p className="text-xs text-gray-600 mt-2 mb-1">
-                          สภาพคืน
-                        </p>
-                        <p className="text-xs text-gray-800">
-                          {txn.conditionOnReturn}
-                        </p>
-                      </>
-                    )}
-                  </div>
-
-                  {/* Damages if any */}
-                  {txn.damagesAndIssues && (
-                    <div className="mb-3 pb-3 border-b border-red-300 bg-red-50 p-2 rounded">
-                      <p className="text-xs text-red-600 mb-1 font-semibold">
-                        ⚠️ ปัญหาและความเสียหาย
-                      </p>
-                      <p className="text-xs text-red-800">
-                        {txn.damagesAndIssues}
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Return Info */}
-                  {txn.returnedBy && (
-                    <div className="text-xs text-gray-600">
-                      <p>
-                        คืนโดย: <span className="font-medium">{txn.returnedBy}</span>
-                      </p>
-                    </div>
-                  )}
-                </div>
-              ))}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-gray-900">
+                        {txn.actualReturnDate ? (
+                          <>
+                            <div className="text-green-600 font-medium">{txn.actualReturnDate}</div>
+                            <div className="text-gray-500">{txn.returnTime} (คืนแล้ว)</div>
+                          </>
+                        ) : (
+                          <>
+                            <div>{txn.expectedReturnDate}</div>
+                            <div className="text-gray-500">{txn.expectedReturnTime || '-'}</div>
+                          </>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(txn.status)}`}>
+                          {getStatusText(txn.status)}
+                        </span>
+                        {txn.confirmedBy && (
+                          <div className="text-[10px] text-gray-500 mt-1">ยืนยัน: {txn.confirmedBy}</div>
+                        )}
+                        {txn.returnedBy && (
+                          <div className="text-[10px] text-gray-500">คืนโดย: {txn.returnedBy}</div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        {txn.status === "scheduled" ? (
+                          <div className="flex flex-col gap-1">
+                            <button
+                              onClick={async () => {
+                                if (!user || processingId) return
+                                setProcessingId(txn.borrowId)
+                                try {
+                                  await confirmBorrowTransaction(txn.borrowId, user, user.displayName || "Admin")
+                                  const equipmentNames = txn.equipmentItems.map(item => `${item.equipmentName} (${item.quantityBorrowed})`).join(", ")
+                                  await logAdminAction({
+                                    user,
+                                    action: 'confirm',
+                                    type: 'borrow',
+                                    itemName: `การยืมของ ${txn.userName}`,
+                                    details: `ยืนยันและมอบอุปกรณ์: ${equipmentNames}`
+                                  })
+                                  setTransactions(prev => prev.map(t => 
+                                    t.borrowId === txn.borrowId 
+                                      ? { ...t, status: "borrowed" as const, confirmedBy: user.displayName || "Admin" }
+                                      : t
+                                  ))
+                                } catch (error) {
+                                  console.error("Error confirming:", error)
+                                  alert("เกิดข้อผิดพลาด")
+                                } finally {
+                                  setProcessingId(null)
+                                }
+                              }}
+                              disabled={processingId === txn.borrowId}
+                              className="px-2 py-1 rounded bg-green-500 text-white text-[10px] font-medium hover:bg-green-600 transition disabled:bg-gray-300"
+                            >
+                              {processingId === txn.borrowId ? "..." : "✓ มอบอุปกรณ์"}
+                            </button>
+                            <button
+                              onClick={async () => {
+                                if (!user || processingId) return
+                                let reason = ""
+                                while (!reason) {
+                                  reason = prompt("กรุณาระบุเหตุผลในการยกเลิก (จำเป็น):")?.trim() || ""
+                                  if (reason === "") {
+                                    alert("ต้องระบุเหตุผลในการยกเลิก!")
+                                  }
+                                }
+                                setProcessingId(txn.borrowId)
+                                try {
+                                  await cancelBorrowTransaction(txn.borrowId, user, user.displayName || "Admin", reason)
+                                  const equipmentNames = txn.equipmentItems.map(item => `${item.equipmentName} (${item.quantityBorrowed})`).join(", ")
+                                  await logAdminAction({
+                                    user,
+                                    action: 'cancel',
+                                    type: 'borrow',
+                                    itemName: `การยืมของ ${txn.userName}`,
+                                    details: `ยกเลิกการยืม: ${equipmentNames} | เหตุผล: ${reason}`
+                                  })
+                                  setTransactions(prev => prev.map(t => 
+                                    t.borrowId === txn.borrowId 
+                                      ? { ...t, status: "cancelled" as const, cancelledBy: user.displayName || "Admin" }
+                                      : t
+                                  ))
+                                } catch (error) {
+                                  console.error("Error cancelling:", error)
+                                  alert("เกิดข้อผิดพลาด")
+                                } finally {
+                                  setProcessingId(null)
+                                }
+                              }}
+                              disabled={processingId === txn.borrowId}
+                              className="px-2 py-1 rounded bg-red-500 text-white text-[10px] font-medium hover:bg-red-600 transition disabled:bg-gray-300"
+                            >
+                              ✗ ยกเลิก
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-gray-400 text-xs">-</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           ) : (
             <div className="w-full text-center text-gray-500 py-8">

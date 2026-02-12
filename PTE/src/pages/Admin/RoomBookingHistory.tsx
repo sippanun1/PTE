@@ -1,5 +1,7 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
+import { collection, getDocs, query, orderBy } from "firebase/firestore"
+import { db } from "../../firebase/firebase"
 import Header from "../../components/Header"
 
 interface RoomBookingRecord {
@@ -25,88 +27,41 @@ export default function RoomBookingHistory() {
   const [customStartDate, setCustomStartDate] = useState("")
   const [customEndDate, setCustomEndDate] = useState("")
   const [showFilters, setShowFilters] = useState(false)
+  const [bookingHistory, setBookingHistory] = useState<RoomBookingRecord[]>([])
+  const [loading, setLoading] = useState(true)
 
-  // Mock booking history data - replace with Firebase
-  const [bookingHistory] = useState<RoomBookingRecord[]>([
-    {
-      id: "1",
-      roomCode: "CB8720",
-      roomType: "ห้องเรียน",
-      userName: "อาจารย์สมชาย ใจดี",
-      userId: "user1",
-      date: "2026-02-05",
-      startTime: "09:00",
-      endTime: "12:00",
-      purpose: "สอนวิชา Computer Programming",
-      status: "completed",
-      bookedAt: "2026-02-01T10:30:00"
-    },
-    {
-      id: "2",
-      roomCode: "CB8721",
-      roomType: "ห้องปฏิบัติการ",
-      userName: "อาจารย์สมหญิง รักเรียน",
-      userId: "user2",
-      date: "2026-02-06",
-      startTime: "13:00",
-      endTime: "16:00",
-      purpose: "สอนวิชา Database Systems",
-      status: "completed",
-      bookedAt: "2026-02-02T14:00:00"
-    },
-    {
-      id: "3",
-      roomCode: "CB8722",
-      roomType: "ห้องประชุม",
-      userName: "นายสมศักดิ์ เก่งมาก",
-      userId: "user3",
-      date: "2026-02-07",
-      startTime: "10:00",
-      endTime: "11:00",
-      purpose: "ประชุมกลุ่มโปรเจค",
-      status: "cancelled",
-      bookedAt: "2026-02-03T09:00:00"
-    },
-    {
-      id: "4",
-      roomCode: "CB8720",
-      roomType: "ห้องเรียน",
-      userName: "ผศ.ดร.วิชัย นักวิจัย",
-      userId: "user4",
-      date: "2026-02-11",
-      startTime: "14:00",
-      endTime: "17:00",
-      purpose: "สัมมนาวิชาการ",
-      status: "upcoming",
-      bookedAt: "2026-02-08T11:00:00"
-    },
-    {
-      id: "5",
-      roomCode: "CB8723",
-      roomType: "ห้องเรียน",
-      userName: "นางสาวพิมพ์ใจ ศึกษาดี",
-      userId: "user5",
-      date: "2026-02-12",
-      startTime: "09:00",
-      endTime: "10:30",
-      purpose: "นำเสนอโปรเจคจบ",
-      status: "upcoming",
-      bookedAt: "2026-02-09T15:30:00"
-    },
-    {
-      id: "6",
-      roomCode: "CB8724",
-      roomType: "ห้องปฏิบัติการ",
-      userName: "อาจารย์มานะ พัฒนา",
-      userId: "user6",
-      date: "2026-02-08",
-      startTime: "13:00",
-      endTime: "15:00",
-      purpose: "Workshop Python Programming",
-      status: "completed",
-      bookedAt: "2026-02-05T08:00:00"
+  // Load booking history from Firebase
+  useEffect(() => {
+    const loadBookingHistory = async () => {
+      try {
+        const q = query(collection(db, "roomBookings"), orderBy("date", "desc"))
+        const querySnapshot = await getDocs(q)
+        const records: RoomBookingRecord[] = []
+        querySnapshot.forEach((doc) => {
+          const data = doc.data()
+          records.push({
+            id: doc.id,
+            roomCode: data.roomCode || "",
+            roomType: data.roomType || "",
+            userName: data.userName || "",
+            userId: data.userId || "",
+            date: data.date || "",
+            startTime: data.startTime || "",
+            endTime: data.endTime || "",
+            purpose: data.purpose || "",
+            status: data.status || "upcoming",
+            bookedAt: data.bookedAt || ""
+          })
+        })
+        setBookingHistory(records)
+      } catch (error) {
+        console.error("Error loading room booking history:", error)
+      } finally {
+        setLoading(false)
+      }
     }
-  ])
+    loadBookingHistory()
+  }, [])
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString)
@@ -369,7 +324,11 @@ export default function RoomBookingHistory() {
 
           {/* Booking History List */}
           <div className="flex flex-col gap-3">
-            {filteredHistory.length > 0 ? (
+            {loading ? (
+              <div className="text-center py-8">
+                <p className="text-gray-500">กำลังโหลดข้อมูล...</p>
+              </div>
+            ) : filteredHistory.length > 0 ? (
               filteredHistory.map((record) => {
                 const statusBadge = getStatusBadge(record.status)
                 return (

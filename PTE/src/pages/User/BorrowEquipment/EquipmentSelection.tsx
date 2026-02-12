@@ -1,23 +1,61 @@
 import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
-import { equipmentData, categories, welldingTypes, machineTypes } from "../../../data/equipment"
+import { collection, getDocs } from "firebase/firestore"
+import { db } from "../../../firebase/firebase"
+import { useAuth } from "../../../hooks/useAuth"
 import shoppingCartIcon from "../../../assets/shoppingcart.svg"
 import type { SelectedEquipment } from "../../../App"
+
+// Default equipment types with subtypes
+const defaultEquipmentTypes: { [key: string]: string[] } = {
+  "งานวัดและตรวจสอบ": [],
+  "งานถอด-ประกอบชิ้นส่วน": [],
+  "งานติดตั้งอุปกรณ์": [],
+  "งานทำเครื่องหมายและขีดเส้น": [],
+  "งานช่างมือพื้นฐาน": [],
+  "Welding": ["SMAW", "GMAW", "GTAW", "GAS", "FCAW"],
+  "Machine": ["Milling", "Lathe", "เครื่องไส", "เครื่องตัด", "เครื่องเจาะ"],
+  "Safety": [],
+}
+
+interface Equipment {
+  id: string
+  name: string
+  category: "consumable" | "asset" | "main"
+  quantity: number
+  unit: string
+  picture?: string
+  inStock: boolean
+  available: number
+  equipmentType?: string
+  equipmentSubType?: string
+}
 
 interface EquipmentSelectionProps {
   cartItems?: SelectedEquipment[]
   setCartItems: (items: SelectedEquipment[]) => void
 }
 
+const ITEMS_PER_PAGE = 30
+
 export default function EquipmentSelection({ setCartItems }: EquipmentSelectionProps) {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [currentDate, setCurrentDate] = useState<string>("")
   const [currentTime, setCurrentTime] = useState<string>("")
   const [searchTerm, setSearchTerm] = useState<string>("")
-  const [selectedCategory, setSelectedCategory] = useState<string>("ทั้งหมด")
-  const [selectedType, setSelectedType] = useState<string>("")
-  const [filteredEquipment, setFilteredEquipment] = useState(equipmentData)
+  const [selectedType, setSelectedType] = useState<string>("ทั้งหมด")
+  const [selectedSubType, setSelectedSubType] = useState<string>("ทั้งหมด")
+  const [showFilters, setShowFilters] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [equipmentTypes, setEquipmentTypes] = useState<{ [key: string]: string[] }>(defaultEquipmentTypes)
+  const [equipmentData, setEquipmentData] = useState<Equipment[]>([])
+  const [filteredEquipment, setFilteredEquipment] = useState<Equipment[]>([])
   const [selectedItems, setSelectedItems] = useState<Map<string, number>>(new Map())
+  const [loading, setLoading] = useState(true)
+
+  // Check if any filter is active
+  const hasActiveFilters = selectedType !== "ทั้งหมด" || selectedSubType !== "ทั้งหมด"
 
   useEffect(() => {
     const updateDateTime = () => {
@@ -41,15 +79,79 @@ export default function EquipmentSelection({ setCartItems }: EquipmentSelectionP
     return () => clearInterval(interval)
   }, [])
 
+  // Load equipment from Firebase
+  useEffect(() => {
+    const loadEquipment = async () => {
+      try {
+        // Load custom equipment types
+        const typesSnapshot = await getDocs(collection(db, "equipmentTypes"))
+        const customTypes: { [key: string]: string[] } = { ...defaultEquipmentTypes }
+        typesSnapshot.forEach((doc) => {
+          const data = doc.data()
+          customTypes[data.name] = data.subtypes || []
+        })
+        setEquipmentTypes(customTypes)
+
+        const querySnapshot = await getDocs(collection(db, "equipment"))
+        const rawList: Equipment[] = []
+        querySnapshot.forEach((doc) => {
+          const data = doc.data()
+          rawList.push({
+            id: doc.id,
+            name: data.name,
+            category: data.category,
+            quantity: data.quantity || 0,
+            unit: data.unit || "ชิ้น",
+            picture: data.picture,
+            inStock: (data.quantity || 0) > 0,
+            available: data.quantity || 0,
+            equipmentType: data.equipmentType || "",
+            equipmentSubType: data.equipmentSubType || ""
+          })
+        })
+        
+        // Group equipment by name
+        const grouped: { [key: string]: Equipment[] } = {}
+        rawList.forEach((item) => {
+          if (!grouped[item.name]) {
+            grouped[item.name] = []
+          }
+          grouped[item.name].push(item)
+        })
+        
+        // Merge items with same name
+        const mergedList: Equipment[] = Object.entries(grouped).map(([_name, items]) => {
+          const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0)
+          return {
+            ...items[0],
+            quantity: totalQuantity,
+            available: totalQuantity,
+            inStock: totalQuantity > 0
+          }
+        })
+        
+        setEquipmentData(mergedList)
+        setFilteredEquipment(mergedList)
+      } catch (error) {
+        console.error("Error loading equipment:", error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    loadEquipment()
+  }, [])
+
   useEffect(() => {
     let filtered = equipmentData
 
-    if (selectedCategory !== "ทั้งหมด") {
-      filtered = filtered.filter(item => item.category === selectedCategory)
-    }
-
-    if (selectedType) {
-      filtered = filtered.filter(item => item.type === selectedType)
+    // Filter by type
+    if (selectedType !== "ทั้งหมด") {
+      filtered = filtered.filter(item => item.equipmentType === selectedType)
+      
+      // Filter by subtype if selected
+      if (selectedSubType !== "ทั้งหมด") {
+        filtered = filtered.filter(item => item.equipmentSubType === selectedSubType)
+      }
     }
 
     if (searchTerm) {
@@ -59,21 +161,34 @@ export default function EquipmentSelection({ setCartItems }: EquipmentSelectionP
     }
 
     setFilteredEquipment(filtered)
-  }, [searchTerm, selectedCategory, selectedType])
+  }, [searchTerm, selectedType, selectedSubType, equipmentData])
 
-  const getTypesByCategory = () => {
-    if (selectedCategory === "Welding") {
-      return welldingTypes
-    } else if (selectedCategory === "Machine") {
-      return machineTypes
-    }
-    return []
-  }
+  // Reset subtype when type changes
+  useEffect(() => {
+    setSelectedSubType("ทั้งหมด")
+  }, [selectedType])
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchTerm, selectedType, selectedSubType])
+
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredEquipment.length / ITEMS_PER_PAGE)
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE
+  const endIndex = startIndex + ITEMS_PER_PAGE
+  const paginatedEquipment = filteredEquipment.slice(startIndex, endIndex)
 
   const handleAddQuantity = (equipmentId: string) => {
+    const equipment = equipmentData.find(e => e.id === equipmentId)
+    if (!equipment) return
+    
+    const currentSelected = selectedItems.get(equipmentId) || 0
+    if (currentSelected >= equipment.available) return // Don't exceed available stock
+    
     setSelectedItems(prev => {
       const newMap = new Map(prev)
-      newMap.set(equipmentId, (newMap.get(equipmentId) || 0) + 1)
+      newMap.set(equipmentId, currentSelected + 1)
       return newMap
     })
   }
@@ -107,7 +222,13 @@ export default function EquipmentSelection({ setCartItems }: EquipmentSelectionP
 
   const totalItems = Array.from(selectedItems.values()).reduce((sum, qty) => sum + qty, 0)
 
-  const types = getTypesByCategory()
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-gray-500">กำลังโหลด...</div>
+      </div>
+    )
+  }
 
   return (
     <div
@@ -156,8 +277,8 @@ export default function EquipmentSelection({ setCartItems }: EquipmentSelectionP
         <div className="w-full max-w-[360px] px-4 flex flex-col items-center">
           {/* Date & Time */}
           <div className="w-full flex justify-between text-gray-600 text-xs mb-4">
-            <div>User (ชื่อ-สกุล)</div>
-            <div>
+            <div>{user?.displayName || user?.email || "User"}</div>
+            <div className="text-right">
               <div>{currentDate}</div>
               <div>Time {currentTime}</div>
             </div>
@@ -170,105 +291,154 @@ export default function EquipmentSelection({ setCartItems }: EquipmentSelectionP
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="ค้นหา"
+                placeholder="ค้นหาชื่ออุปกรณ์..."
                 className="
                   w-full h-10
                   px-4
                   rounded-full
-                  border border-gray-400
+                  border border-gray-300
                   outline-none
                   text-sm
                   placeholder-gray-400
+                  focus:border-orange-500
                 "
               />
-              <button className="absolute right-3 text-gray-600 hover:text-gray-800">
-                🔍
-              </button>
+              <span className="absolute right-3 text-gray-400">🔍</span>
             </div>
           </div>
 
-          {/* Category Filters */}
-          <div className="w-full mb-3">
-            <div className="text-xs font-semibold text-gray-700 mb-2">หมวดหลัก</div>
-            <div className="flex gap-2 overflow-x-auto pb-2">
-              {categories.map((category) => (
-                <button
-                  key={category}
-                  onClick={() => {
-                    setSelectedCategory(category)
-                    setSelectedType("")
-                  }}
-                  className={`
-                    px-4 py-1
-                    rounded-full
-                    text-sm font-medium
-                    whitespace-nowrap
-                    transition
-                    ${
-                      selectedCategory === category
-                        ? "bg-orange-500 text-white border-b-2 border-orange-500"
-                        : "bg-white text-gray-700 border border-gray-400 hover:border-gray-600"
-                    }
-                  `}
-                >
-                  {category}
-                </button>
-              ))}
-            </div>
-          </div>
+          {/* Filter Section */}
+          <div className="w-full bg-gray-50 border border-gray-200 rounded-lg mb-4 overflow-hidden">
+            {/* Filter Header - Always Visible */}
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className="w-full px-4 py-3 flex justify-between items-center hover:bg-gray-100 transition"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold text-gray-700">🔧 ตัวกรอง</span>
+                {hasActiveFilters && (
+                  <span className="px-2 py-0.5 bg-orange-100 text-orange-600 text-xs rounded-full">
+                    กำลังใช้งาน
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-gray-500">
+                  พบ <span className="font-semibold text-orange-600">{filteredEquipment.length}</span> รายการ
+                </span>
+                <span className={`text-gray-400 transition-transform ${showFilters ? 'rotate-180' : ''}`}>
+                  ▼
+                </span>
+              </div>
+            </button>
 
-          {/* Type Filters */}
-          {types.length > 0 && (
-            <div className="w-full mb-5 pb-4 border-b-2 border-gray-200">
-              <div className="text-xs font-semibold text-gray-700 mb-2 ml-2">
-                ┗ ประเภท ({selectedCategory})
+            {/* Collapsible Filter Content */}
+            {showFilters && (
+              <div className="px-4 pb-4 border-t border-gray-200">
+                {/* Type Filters */}
+                <div className="mt-4 mb-4">
+                  <div className="text-xs font-semibold text-gray-600 mb-2">ประเภท:</div>
+                  <div className="flex gap-2 flex-wrap">
+                    <button
+                      onClick={() => setSelectedType("ทั้งหมด")}
+                      className={`
+                        px-4 py-2
+                        rounded-full
+                        text-sm font-medium
+                        transition
+                        ${selectedType === "ทั้งหมด"
+                          ? "bg-orange-500 text-white"
+                          : "border border-gray-300 text-gray-700 hover:border-orange-500"
+                        }
+                      `}
+                    >
+                      ทั้งหมด
+                    </button>
+                    {Object.keys(equipmentTypes).map((type) => (
+                      <button
+                        key={type}
+                        onClick={() => setSelectedType(type)}
+                        className={`
+                          px-4 py-2
+                          rounded-full
+                          text-sm font-medium
+                          transition
+                          ${selectedType === type
+                            ? "bg-orange-500 text-white"
+                            : "border border-gray-300 text-gray-700 hover:border-orange-500"
+                          }
+                        `}
+                      >
+                        {type}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* SubType Filters */}
+                {selectedType !== "ทั้งหมด" && equipmentTypes[selectedType]?.length > 0 && (
+                  <div className="mb-4">
+                    <div className="text-xs font-semibold text-gray-600 mb-2">ประเภทย่อย:</div>
+                    <div className="flex gap-2 flex-wrap">
+                      <button
+                        onClick={() => setSelectedSubType("ทั้งหมด")}
+                        className={`
+                          px-4 py-2
+                          rounded-full
+                          text-sm font-medium
+                          transition
+                          ${selectedSubType === "ทั้งหมด"
+                            ? "bg-blue-500 text-white"
+                            : "border border-gray-300 text-gray-700 hover:border-blue-500"
+                          }
+                        `}
+                      >
+                        ทั้งหมด
+                      </button>
+                      {equipmentTypes[selectedType].map((subType) => (
+                        <button
+                          key={subType}
+                          onClick={() => setSelectedSubType(subType)}
+                          className={`
+                            px-4 py-2
+                            rounded-full
+                            text-sm font-medium
+                            transition
+                            ${selectedSubType === subType
+                              ? "bg-blue-500 text-white"
+                              : "border border-gray-300 text-gray-700 hover:border-blue-500"
+                            }
+                          `}
+                        >
+                          {subType}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Clear Filters Button */}
+                {hasActiveFilters && (
+                  <div className="pt-3 border-t border-gray-200">
+                    <button
+                      onClick={() => {
+                        setSelectedType("ทั้งหมด")
+                        setSelectedSubType("ทั้งหมด")
+                      }}
+                      className="text-sm text-gray-500 hover:text-red-500 transition flex items-center gap-1"
+                    >
+                      ✕ ล้างตัวกรองทั้งหมด
+                    </button>
+                  </div>
+                )}
               </div>
-              <div className="ml-4 flex gap-2 overflow-x-auto pb-2">
-                <button
-                  onClick={() => setSelectedType("")}
-                  className={`
-                    px-4 py-1
-                    rounded-full
-                    text-sm font-medium
-                    whitespace-nowrap
-                    transition
-                    ${
-                      selectedType === ""
-                        ? "bg-orange-300 text-white"
-                        : "bg-white text-gray-700 border border-gray-400 hover:border-gray-600"
-                    }
-                  `}
-                >
-                  ทั้งหมด
-                </button>
-                {types.map((type) => (
-                  <button
-                    key={type}
-                    onClick={() => setSelectedType(type)}
-                    className={`
-                      px-4 py-1
-                      rounded-full
-                      text-sm font-medium
-                      whitespace-nowrap
-                      transition
-                      ${
-                        selectedType === type
-                          ? "bg-orange-300 text-white"
-                          : "bg-white text-gray-700 border border-gray-400 hover:border-gray-600"
-                      }
-                    `}
-                  >
-                    {type}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
+            )}
+          </div>
 
           {/* Equipment Grid */}
           <div className="w-full grid grid-cols-2 gap-4 mb-6">
-            {filteredEquipment.length > 0 ? (
-              filteredEquipment.map((item) => (
+            {paginatedEquipment.length > 0 ? (
+              paginatedEquipment.map((item) => (
                 <div
                   key={item.id}
                   className={`
@@ -284,14 +454,34 @@ export default function EquipmentSelection({ setCartItems }: EquipmentSelectionP
                     }
                   `}
                 >
+                  {/* Equipment Image */}
+                  <div className="h-20 mb-3 flex justify-center items-center">
+                    {item.picture ? (
+                      <img
+                        src={item.picture}
+                        alt={item.name}
+                        className="max-h-full max-w-full object-contain rounded"
+                      />
+                    ) : (
+                      <div className="text-4xl">📦</div>
+                    )}
+                  </div>
+
                   {/* Equipment Name */}
-                  <h3 className="text-sm font-semibold text-gray-800 mb-3">
+                  <h3 className="text-sm font-semibold text-gray-800 mb-2 line-clamp-2">
                     {item.name}
                   </h3>
 
-                  {/* Equipment Image */}
-                  <div className="text-5xl mb-4 flex justify-center">
-                    {item.image}
+                  {/* Type */}
+                  <div className="text-xs text-gray-500 mb-2">
+                    {item.equipmentType ? (
+                      <>
+                        {item.equipmentType}
+                        {item.equipmentSubType && ` (${item.equipmentSubType})`}
+                      </>
+                    ) : (
+                      "ไม่ระบุประเภท"
+                    )}
                   </div>
 
                   {/* Stock Status */}
@@ -308,15 +498,10 @@ export default function EquipmentSelection({ setCartItems }: EquipmentSelectionP
                     {item.inStock ? "สต็อคพร้อมใช้งาน" : "สต็อคหมดแล้ว"}
                   </div>
 
-                  {/* Equipment Code */}
-                  <div className="text-xs font-medium text-gray-600 mb-1">
-                    {item.code}
-                  </div>
-
                   {/* Available Quantity */}
                   <div className="text-xs text-gray-500 mb-4">
                     {item.available > 0 ? (
-                      <>จำนวนคงเหลือ {item.available} ชิ้น</>
+                      <>จำนวนคงเหลือ {item.available} {item.unit}</>
                     ) : (
                       <>หมดสต็อค</>
                     )}
@@ -395,6 +580,108 @@ export default function EquipmentSelection({ setCartItems }: EquipmentSelectionP
               </div>
             )}
           </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="w-full flex justify-center items-center gap-2 mb-4">
+              <button
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className={`
+                  px-3 py-1
+                  rounded-full
+                  text-sm font-medium
+                  transition
+                  ${currentPage === 1
+                    ? "bg-gray-200 text-gray-400 cursor-not-allowed"
+                    : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                  }
+                `}
+              >
+                ◀
+              </button>
+              
+              {/* Page Numbers */}
+              <div className="flex gap-1">
+                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                  .filter(page => {
+                    // Show first, last, current, and pages around current
+                    if (page === 1 || page === totalPages) return true
+                    if (Math.abs(page - currentPage) <= 1) return true
+                    return false
+                  })
+                  .map((page, index, arr) => (
+                    <div key={page} className="flex items-center">
+                      {/* Add ellipsis if there's a gap */}
+                      {index > 0 && arr[index - 1] !== page - 1 && (
+                        <span className="px-1 text-gray-400">...</span>
+                      )}
+                      <button
+                        onClick={() => setCurrentPage(page)}
+                        className={`
+                          w-8 h-8
+                          rounded-full
+                          text-sm font-medium
+                          transition
+                          ${currentPage === page
+                            ? "bg-orange-500 text-white"
+                            : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                          }
+                        `}
+                      >
+                        {page}
+                      </button>
+                    </div>
+                  ))}
+              </div>
+
+              <button
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className={`
+                  px-3 py-1
+                  rounded-full
+                  text-sm font-medium
+                  transition
+                  ${currentPage === totalPages
+                    ? "bg-gray-200 text-gray-400 cursor-not-allowed"
+                    : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                  }
+                `}
+              >
+                ▶
+              </button>
+            </div>
+          )}
+
+          {/* Page Info */}
+          {filteredEquipment.length > 0 && (
+            <div className="w-full text-center text-xs text-gray-500 mb-4">
+              แสดง {startIndex + 1}-{Math.min(endIndex, filteredEquipment.length)} จาก {filteredEquipment.length} รายการ
+            </div>
+          )}
+
+          {/* Cart Button */}
+          <button
+            onClick={handleCheckout}
+            disabled={totalItems === 0}
+            className={`
+              w-full
+              py-3
+              rounded-full
+              text-sm font-semibold
+              transition
+              mb-4
+              flex items-center justify-center gap-2
+              ${totalItems === 0
+                ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                : "bg-orange-500 text-white hover:bg-orange-600"
+              }
+            `}
+          >
+            <img src={shoppingCartIcon} alt="" className="w-5 h-5" />
+            <span>ตะกร้าอุปกรณ์ ({totalItems} ชิ้น)</span>
+          </button>
 
           {/* Back Button */}
           <button

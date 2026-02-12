@@ -65,7 +65,6 @@ export default function Register() {
         createdAt: new Date().toISOString()
       })
 
-      console.log("User registered successfully:", form)
       setShowSuccessModal(true)
     } catch (err: unknown) {
       const error = err as { code?: string; message?: string }
