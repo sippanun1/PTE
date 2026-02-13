@@ -48,12 +48,28 @@ export interface SelectedEquipment extends Equipment {
 }
 
 export interface ReturnEquipmentItem {
+  borrowId: string
   id: string
+  equipmentId?: string
   name: string
   code: string
   checked: boolean
   quantity: number
+  quantityBorrowed: number
   status: string
+  notes?: string
+  borrowDate: string
+  borrowTime: string
+  borrowType: string
+  userName: string
+  expectedReturnDate: string
+  expectedReturnTime?: string
+  equipmentCategory?: string
+  consumptionStatus?: string
+  // Asset return breakdown
+  returnGoodQty?: number
+  returnDamagedQty?: number
+  returnLostQty?: number
 }
 
 export interface BookingData {

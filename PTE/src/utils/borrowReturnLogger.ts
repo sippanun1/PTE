@@ -409,8 +409,8 @@ export async function approveReturnTransaction(
 export async function rejectReturnTransaction(
   borrowId: string,
   rejectionReason: string,
-  rejectedBy?: User,
-  rejectedByName?: string
+  // rejectedBy?: User,
+  // rejectedByName?: string
 ) {
   try {
     const borrowDocRef = doc(db, "borrowHistory", borrowId)

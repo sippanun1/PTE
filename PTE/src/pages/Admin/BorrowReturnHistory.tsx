@@ -854,7 +854,7 @@ export default function BorrowReturnHistory() {
                             setProcessingId(selectedBorrowId)
                             
                             try {
-                              await rejectReturnTransaction(selectedBorrowId, rejectionReason, user, user.displayName || "Admin")
+                              await rejectReturnTransaction(selectedBorrowId, rejectionReason)
                               const equipmentNames = detailsModal.equipmentItems.map(item => `${item.equipmentName} (${item.quantityBorrowed})`).join(", ")
                               await logAdminAction({
                                 user,
