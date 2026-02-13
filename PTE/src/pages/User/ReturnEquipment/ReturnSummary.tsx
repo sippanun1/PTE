@@ -1,7 +1,8 @@
 import Header from "../../../components/Header"
-import UserInfoBox from "../../../components/UserInfoBox"
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
+import { useAuth } from "../../../hooks/useAuth"
+import { logReturnTransaction } from "../../../utils/borrowReturnLogger"
 
 interface EquipmentItem {
   id: string
@@ -9,7 +10,21 @@ interface EquipmentItem {
   code: string
   checked: boolean
   quantity: number
+  quantityBorrowed: number
   status: string
+  notes?: string
+  borrowId?: string
+  borrowDate?: string
+  borrowTime?: string
+  equipmentId?: string
+  expectedReturnDate?: string
+  expectedReturnTime?: string
+  equipmentCategory?: string
+  consumptionStatus?: string
+  // Asset return breakdown
+  returnGoodQty?: number
+  returnDamagedQty?: number
+  returnLostQty?: number
 }
 
 interface ReturnSummaryProps {
@@ -20,11 +35,11 @@ interface ReturnSummaryProps {
 const getStatusColor = (status: string) => {
   switch (status) {
     case "ปกติ":
-      return "bg-green-500"
+      return "bg-green-600"
     case "ชำรุด":
-      return "bg-red-500"
+      return "bg-red-600"
     case "สูญหาย":
-      return "bg-yellow-500"
+      return "bg-orange-600"
     default:
       return "bg-gray-400"
   }
@@ -32,10 +47,36 @@ const getStatusColor = (status: string) => {
 
 export default function ReturnSummary({ returnEquipment, setReturnEquipment }: ReturnSummaryProps) {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const checkedItems = returnEquipment.filter(item => item.checked)
   const totalItems = checkedItems.length
-  const totalQuantity = checkedItems.reduce((sum, item) => sum + item.quantity, 0)
+  const totalQuantity = checkedItems.reduce((sum, item) => {
+    if (item.equipmentCategory === "consumable") {
+      return sum + (item.quantity || 0)
+    } else {
+      // For assets, sum the breakdown
+      return sum + ((item.returnGoodQty || 0) + (item.returnDamagedQty || 0) + (item.returnLostQty || 0))
+    }
+  }, 0)
   const [showConfirmModal, setShowConfirmModal] = useState(false)
+  const [isProcessing, setIsProcessing] = useState(false)
+
+  // Get current date and time
+  const now = new Date()
+  const returnDate = now.toLocaleDateString('th-TH', { 
+    year: 'numeric', 
+    month: '2-digit', 
+    day: '2-digit' 
+  })
+  const returnTime = now.toLocaleTimeString('th-TH', { 
+    hour: '2-digit', 
+    minute: '2-digit' 
+  })
+
+  // Get expected return date and time from first checked item
+  const expectedReturnDate = checkedItems[0]?.expectedReturnDate || ''
+  const expectedReturnTime = checkedItems[0]?.expectedReturnTime || ''
+  const userName = user?.displayName || user?.email || 'User'
 
   return (
     <div
@@ -52,35 +93,114 @@ export default function ReturnSummary({ returnEquipment, setReturnEquipment }: R
       {/* ===== CONTENT ===== */}
       <div className="mt-6 flex justify-center">
         <div className="w-full max-w-[360px] px-4 flex flex-col items-center">
-          {/* User Info Box */}
-          <UserInfoBox 
-            userName="User (ชื่อ-สกุล)"
-            date="จำหน่าย 30/05/68"
-            time="เวลา: "
-          />
+          {/* Summary Header */}
+          <div className="w-full bg-gray-100 rounded-lg p-4 mb-6">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">👤</span>
+                <span className="text-sm text-gray-700">{userName}</span>
+              </div>
+            </div>
+            <div className="flex items-center justify-between mb-2 text-xs text-gray-600">
+              <div className="flex items-center gap-2">
+                <span>📅</span>
+                <span>วันที่ยืม: {checkedItems[0]?.borrowDate || '-'} {checkedItems[0]?.borrowTime || '-'}</span>
+              </div>
+            </div>
+            <div className="flex items-center justify-between text-xs text-blue-600 font-medium">
+              <div className="flex items-center gap-2">
+                <span>📋</span>
+                <span>กำหนดคืน: {expectedReturnDate} {expectedReturnTime || '-'}</span>
+              </div>
+            </div>
+          </div>
 
           {/* Equipment Summary Items */}
           <div className="w-full mb-6 space-y-3">
             {checkedItems.map((item) => (
               <div key={item.id} className="bg-white border border-gray-200 rounded-lg p-4">
-                <div className="flex justify-between items-start mb-2">
+                <div className="flex justify-between items-start mb-3">
                   <div>
                     <h4 className="text-sm font-semibold text-gray-800">{item.name}</h4>
                     <p className="text-xs text-blue-500 font-medium">{item.code}</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-xs text-gray-600">จำนวน</p>
-                    <p className="text-sm font-semibold text-gray-800">x{item.quantity}</p>
+                    {item.equipmentCategory === "consumable" ? (
+                      <div>
+                        <p className="text-xs text-gray-600">ยืม / คืน</p>
+                        <p className="text-sm font-semibold text-gray-800">{item.quantityBorrowed} / {item.quantity} ชิ้น</p>
+                      </div>
+                    ) : (
+                      // For assets, calculate from breakdown
+                      (() => {
+                        const returnedQty = (item.returnGoodQty || 0) + (item.returnDamagedQty || 0) + (item.returnLostQty || 0)
+                        return (
+                          <div>
+                            <p className="text-xs text-gray-600">ยืม / คืน</p>
+                            <p className="text-sm font-semibold text-gray-800">{item.quantityBorrowed} / {returnedQty} ชิ้น</p>
+                          </div>
+                        )
+                      })()
+                    )}
                   </div>
                 </div>
 
-                {/* Status Badge */}
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-600">สภาพ:</span>
-                  <span className={`${getStatusColor(item.status)} text-white text-xs font-semibold px-3 py-1 rounded-full`}>
-                    {item.status}
-                  </span>
-                </div>
+                {/* Status/Breakdown Details */}
+                {item.equipmentCategory === "consumable" ? (
+                  // CONSUMABLE: Show quantity returned + consumption status
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-2">
+                    <div className="grid grid-cols-2 gap-3 mb-3">
+                      <div className="text-center">
+                        <p className="text-xs text-gray-600 font-semibold mb-1">ยืมไป</p>
+                        <p className="text-sm font-bold text-gray-800">{item.quantityBorrowed} ชิ้น</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-xs text-gray-600 font-semibold mb-1">คืนมา</p>
+                        <p className="text-sm font-bold text-blue-700">{item.quantity} ชิ้น</p>
+                      </div>
+                    </div>
+                    <div className="border-t border-blue-200 pt-2">
+                      <p className="text-xs text-gray-600 font-semibold mb-2">สถานะการใช้:</p>
+                      <span className="bg-blue-600 text-white text-xs font-semibold px-3 py-1 rounded-full inline-block">
+                        {item.consumptionStatus || "ไม่ได้ระบุ"}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  // ASSET: Show breakdown details
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-2">
+                    <p className="text-xs text-gray-600 font-semibold mb-2">รายละเอียดการคืน:</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="text-center p-2 bg-green-50 border border-green-200 rounded">
+                        <p className="text-xs text-gray-600 font-semibold">ปกติ</p>
+                        <p className="text-sm font-bold text-green-700">{item.returnGoodQty || 0}</p>
+                      </div>
+                      <div className="text-center p-2 bg-orange-50 border border-orange-200 rounded">
+                        <p className="text-xs text-gray-600 font-semibold">ชำรุด</p>
+                        <p className="text-sm font-bold text-orange-700">{item.returnDamagedQty || 0}</p>
+                      </div>
+                      <div className="text-center p-2 bg-red-50 border border-red-200 rounded">
+                        <p className="text-xs text-gray-600 font-semibold">สูญหาย</p>
+                        <p className="text-sm font-bold text-red-700">{item.returnLostQty || 0}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Notes for items (consumables or assets with damage/loss) */}
+                {item.notes && (
+                  <div className={`rounded p-2 mt-2 text-xs ${
+                    item.equipmentCategory === "consumable"
+                      ? "bg-blue-50 border border-blue-200"
+                      : (item.returnLostQty || 0) > 0
+                        ? "bg-red-50 border border-red-200"
+                        : "bg-orange-50 border border-orange-200"
+                  }`}>
+                    <p className="text-gray-700">
+                      <span className="font-semibold">หมายเหตุ:</span> {item.notes}
+                    </p>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -148,11 +268,94 @@ export default function ReturnSummary({ returnEquipment, setReturnEquipment }: R
             {/* Modal Buttons */}
             <div className="w-full px-6 py-6 flex gap-3">
               <button
-                onClick={() => {
-                  setShowConfirmModal(false)
-                  setReturnEquipment([])
-                  navigate('/home')
+                onClick={async () => {
+                  if (isProcessing || !user) return
+                  setIsProcessing(true)
+                  
+                  try {
+                    // Group items by borrowId
+                    const borrowsById: { [key: string]: EquipmentItem[] } = {}
+                    checkedItems.forEach(item => {
+                      if (item.borrowId) {
+                        if (!borrowsById[item.borrowId]) {
+                          borrowsById[item.borrowId] = []
+                        }
+                        borrowsById[item.borrowId].push(item)
+                      }
+                    })
+
+                    // Log return for each borrow request
+                    const today = new Date().toISOString().split('T')[0]
+                    const time = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })
+                    
+                    for (const [borrowId, items] of Object.entries(borrowsById)) {
+                      // Convert to BorrowItem format with return conditions
+                      const returnedItems = items.map(item => {
+                        const isConsumable = item.equipmentCategory === "consumable"
+                        
+                        if (isConsumable) {
+                          return {
+                            equipmentId: item.equipmentId || item.id,
+                            equipmentName: item.name,
+                            equipmentCategory: item.equipmentCategory || "asset",
+                            quantityBorrowed: item.quantityBorrowed,
+                            quantityReturned: item.quantity,
+                            consumptionStatus: item.consumptionStatus,
+                            returnNotes: item.notes
+                          }
+                        } else {
+                          // For assets: determine condition and quantity based on breakdown
+                          const goodQty = item.returnGoodQty || 0
+                          const damagedQty = item.returnDamagedQty || 0
+                          const lostQty = item.returnLostQty || 0
+                          const totalReturned = goodQty + damagedQty + lostQty
+                          
+                          // Determine the primary return condition
+                          let returnCondition = "ปกติ"
+                          if (lostQty > 0) {
+                            returnCondition = "สูญหาย"
+                          } else if (damagedQty > 0) {
+                            returnCondition = "ชำรุด"
+                          }
+                          
+                          return {
+                            equipmentId: item.equipmentId || item.id,
+                            equipmentName: item.name,
+                            equipmentCategory: item.equipmentCategory || "asset",
+                            quantityBorrowed: item.quantityBorrowed,
+                            quantityReturned: totalReturned,
+                            returnCondition,
+                            returnGoodQty: goodQty,
+                            returnDamagedQty: damagedQty,
+                            returnLostQty: lostQty,
+                            returnNotes: item.notes || ""
+                          }
+                        }
+                      })
+
+                      await logReturnTransaction(
+                        borrowId,
+                        today,
+                        time,
+                        "completed", // Overall condition
+                        "", // No general damages for individual items
+                        user,
+                        user.displayName || "User",
+                        "", // No general notes
+                        returnedItems
+                      )
+                    }
+
+                    setShowConfirmModal(false)
+                    setReturnEquipment([])
+                    navigate('/home')
+                  } catch (error) {
+                    console.error("Error saving return:", error)
+                    alert("เกิดข้อผิดพลาดในการบันทึกการคืนอุปกรณ์")
+                    setIsProcessing(false)
+                  }
                 }}
+                disabled={isProcessing}
                 className="
                   flex-1
                   py-2
@@ -162,12 +365,15 @@ export default function ReturnSummary({ returnEquipment, setReturnEquipment }: R
                   text-sm font-medium
                   hover:bg-orange-600
                   transition
+                  disabled:bg-gray-400
+                  disabled:cursor-not-allowed
                 "
               >
-                ยืนยัน
+                {isProcessing ? "กำลังบันทึก..." : "ยืนยัน"}
               </button>
               <button
                 onClick={() => setShowConfirmModal(false)}
+                disabled={isProcessing}
                 className="
                   flex-1
                   py-2
@@ -177,6 +383,7 @@ export default function ReturnSummary({ returnEquipment, setReturnEquipment }: R
                   font-medium
                   hover:bg-gray-100
                   transition
+                  disabled:opacity-50
                 "
               >
                 ย้อนกลับ

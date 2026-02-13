@@ -2,12 +2,15 @@ import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import { signOut } from "firebase/auth"
 import { auth } from "../firebase/firebase"
+import { useAuth } from "../hooks/useAuth"
 import Header from "../components/Header"
 
 export default function Home() {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [currentDate, setCurrentDate] = useState<string>("")
   const [currentTime, setCurrentTime] = useState<string>("")
+
 
   useEffect(() => {
     const updateDateTime = () => {
@@ -30,6 +33,8 @@ export default function Home() {
     const interval = setInterval(updateDateTime, 1000)
     return () => clearInterval(interval)
   }, [])
+
+
 
   const handleLogout = async () => {
     try {
@@ -66,22 +71,7 @@ export default function Home() {
             User (ชื่อ-สกุล)
           </div>
 
-          {/* Summary/Status Box */}
-          <input
-            type="text"
-            placeholder="กิจกรรมที่เข้ม ไปลงทะเบียน (สรุปรวม)"
-            readOnly
-            className="
-              w-full h-14
-              px-5
-              rounded-3xl
-              border border-gray-400
-              outline-none
-              text-sm
-              text-gray-600
-              mb-6
-            "
-          />
+
 
           {/* Action Buttons */}
           <div className="w-full flex flex-col gap-4">

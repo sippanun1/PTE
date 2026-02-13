@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
-import { collection, getDocs } from "firebase/firestore"
+import { collection, getDocs, query, where } from "firebase/firestore"
 import { db } from "../../../firebase/firebase"
 import { useAuth } from "../../../hooks/useAuth"
 import shoppingCartIcon from "../../../assets/shoppingcart.svg"
 import type { SelectedEquipment } from "../../../App"
+import type { BorrowTransaction } from "../../../utils/borrowReturnLogger"
 
 // Default equipment types with subtypes
 const defaultEquipmentTypes: { [key: string]: string[] } = {
@@ -92,6 +93,7 @@ export default function EquipmentSelection({ setCartItems }: EquipmentSelectionP
         })
         setEquipmentTypes(customTypes)
 
+        // Load all equipment
         const querySnapshot = await getDocs(collection(db, "equipment"))
         const rawList: Equipment[] = []
         querySnapshot.forEach((doc) => {
@@ -110,6 +112,25 @@ export default function EquipmentSelection({ setCartItems }: EquipmentSelectionP
           })
         })
         
+        // Get borrow history to calculate broken/lost items
+        const borrowHistorySnapshot = await getDocs(collection(db, "borrowHistory"))
+        const brokenLostByEquipment = new Map<string, number>()
+        
+        borrowHistorySnapshot.forEach((doc) => {
+          const txn = doc.data() as BorrowTransaction
+          
+          txn.equipmentItems?.forEach((item) => {
+            // Count returned items as broken or lost (exclude from available)
+            if (txn.status === "returned" && (item.returnCondition === "ชำรุด" || item.returnCondition === "สูญหาย")) {
+              const equipmentId = item.equipmentId || ""
+              brokenLostByEquipment.set(
+                equipmentId,
+                (brokenLostByEquipment.get(equipmentId) || 0) + item.quantityBorrowed
+              )
+            }
+          })
+        })
+        
         // Group equipment by name
         const grouped: { [key: string]: Equipment[] } = {}
         rawList.forEach((item) => {
@@ -119,14 +140,22 @@ export default function EquipmentSelection({ setCartItems }: EquipmentSelectionP
           grouped[item.name].push(item)
         })
         
-        // Merge items with same name
+        // Merge items with same name and calculate actual available quantity
         const mergedList: Equipment[] = Object.entries(grouped).map(([_name, items]) => {
           const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0)
+          const firstItem = items[0]
+          const equipmentId = firstItem.id
+          
+          // The Firebase quantity field already has borrowed items subtracted
+          // Only subtract broken/lost items
+          const brokenLost = brokenLostByEquipment.get(equipmentId) || 0
+          const availableQuantity = Math.max(0, totalQuantity - brokenLost)
+          
           return {
-            ...items[0],
+            ...firstItem,
             quantity: totalQuantity,
-            available: totalQuantity,
-            inStock: totalQuantity > 0
+            available: availableQuantity,
+            inStock: availableQuantity > 0
           }
         })
         

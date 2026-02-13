@@ -118,7 +118,7 @@ export default function CompletionPage({ cartItems, setCartItems }: CompletionPa
                     </p>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm font-semibold text-gray-800">{item.quantity}</p>
+                    <p className="text-sm font-semibold text-gray-800">{item.selectedQuantity}</p>
                     <p className="text-xs text-gray-500">{item.unit || "ชิ้น"}</p>
                   </div>
                 </div>

@@ -83,7 +83,7 @@ export default function ConfirmSummary({ cartItems }: ConfirmSummaryProps) {
       const equipmentItems = cartItems.map(item => ({
         equipmentId: item.id,
         equipmentName: item.name,
-        equipmentCategory: item.equipmentType + (item.equipmentSubType ? ` (${item.equipmentSubType})` : ""),
+        equipmentCategory: item.category,
         quantityBorrowed: item.selectedQuantity
       }))
 

@@ -76,6 +76,23 @@ export default function AdminDashboard() {
               จัดการอุปกรณ์/ครุภัณฑ์
             </button>
 
+            {/* Equipment Condition Report Button */}
+            <button
+              onClick={() => navigate('/admin/equipment-condition')}
+              className="
+                w-full
+                py-4
+                rounded-full
+                text-white
+                text-base font-semibold
+                hover:opacity-90
+                transition
+              "
+              style={{ backgroundColor: "#DC2626" }}
+            >
+              📊 รายงานสภาพอุปกรณ์
+            </button>
+
             {/* Borrow/Return History Button */}
             <button
               onClick={() => navigate('/admin/borrow-return-history')}
@@ -127,7 +144,7 @@ export default function AdminDashboard() {
               ประวัติการจัดการของแอดมิน
             </button>
 
-                        {/* Admin Management Button */}
+            {/* Admin Management Button */}
             <button
               onClick={() => navigate('/admin/management')}
               className="
@@ -143,10 +160,9 @@ export default function AdminDashboard() {
             >
               จัดการแอดมิน
             </button>
-            
           </div>
 
-          {/* Back Button */}
+          {/* Logout Button */}
           <button
             onClick={handleLogout}
             className="

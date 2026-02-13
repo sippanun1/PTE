@@ -19,6 +19,7 @@ import RoomBookingForm from './pages/User/RoomBooking/RoomBookingForm'
 import MyRoomBookings from './pages/User/RoomBooking/MyRoomBookings'
 import ReturnRoomForm from './pages/User/RoomBooking/ReturnRoomForm'
 import AdminDashboard from './pages/Admin/AdminDashboard'
+import EquipmentConditionReport from './pages/Admin/EquipmentConditionReport'
 import AdminManageRooms from './pages/Admin/AdminManageRooms'
 import AdminManageEquipment from './pages/Admin/AdminManageEquipment'
 import RoomSchedule from './pages/Admin/RoomSchedule'
@@ -100,6 +101,8 @@ function App() {
         <Route path="/room-booking/my-bookings" element={<ProtectedRoute element={<MyRoomBookings setReturnBookingData={setReturnBookingData} />} />} />
         <Route path="/room-booking/return" element={<ProtectedRoute element={returnBookingData ? <ReturnRoomForm booking={returnBookingData} onConfirmReturn={(returnData) => console.log('Return confirmed:', returnData)} /> : <Navigate to="/room-booking/my-bookings" />} />} />
         <Route path="/admin" element={<ProtectedRoute element={<AdminDashboard />} requiredRole="admin" />} />
+        <Route path="/admin/dashboard" element={<ProtectedRoute element={<AdminDashboard />} requiredRole="admin" />} />
+        <Route path="/admin/equipment-condition" element={<ProtectedRoute element={<EquipmentConditionReport />} requiredRole="admin" />} />
         <Route path="/admin/manage-rooms" element={<ProtectedRoute element={<AdminManageRooms />} requiredRole="admin" />} />
         <Route path="/admin/room-schedule/:roomId" element={<ProtectedRoute element={<RoomSchedule />} requiredRole="admin" />} />
         <Route path="/admin/manage-equipment" element={<ProtectedRoute element={<AdminManageEquipment />} requiredRole="admin" />} />
