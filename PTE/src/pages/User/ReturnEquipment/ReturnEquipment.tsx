@@ -129,11 +129,7 @@ export default function ReturnEquipment({ setReturnEquipment }: ReturnEquipmentP
     ))
   }
 
-  const handleStatusChange = (key: string, value: string) => {
-    setEquipment(equipment.map(item =>
-      `${item.borrowId}-${item.id}` === key ? { ...item, status: value } : item
-    ))
-  }
+
 
   const handleConsumptionStatusChange = (key: string, value: string) => {
     setEquipment(equipment.map(item =>

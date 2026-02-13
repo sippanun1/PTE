@@ -7,7 +7,7 @@ import Header from "../components/Header"
 
 export default function Home() {
   const navigate = useNavigate()
-  const { user } = useAuth()
+  const { user: _user } = useAuth()
   const [currentDate, setCurrentDate] = useState<string>("")
   const [currentTime, setCurrentTime] = useState<string>("")
 

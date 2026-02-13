@@ -118,12 +118,12 @@ export default function EquipmentConditionReport() {
   }
 
   const filteredEquipment = {
-    ชำรุด: groupedByCondition.ชำรุด.filter(e => 
+    ชำรุด: groupedByCondition.ชำรุด.filter(_e => 
       filter === 'all' || filter === 'ชำรุด'
     ).filter(e =>
       e.equipmentName.toLowerCase().includes(searchTerm.toLowerCase())
     ),
-    สูญหาย: groupedByCondition.สูญหาย.filter(e => 
+    สูญหาย: groupedByCondition.สูญหาย.filter(_e => 
       filter === 'all' || filter === 'สูญหาย'
     ).filter(e =>
       e.equipmentName.toLowerCase().includes(searchTerm.toLowerCase())
@@ -153,10 +153,11 @@ export default function EquipmentConditionReport() {
       const docRef = doc(db, "borrowHistory", docId)
       
       // Get the current document to preserve other data
-      const borrowHistoryQuery = query(
-        collection(db, "borrowHistory"),
-        where("__name__", "==", docId)
-      )
+      // Unused query - using simple getDocs instead
+      // const borrowHistoryQuery = query(
+      //   collection(db, "borrowHistory"),
+      //   where("__name__", "==", docId)
+      // )
       const querySnapshot = await getDocs(query(collection(db, "borrowHistory")))
       let foundDoc = null
       

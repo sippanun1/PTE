@@ -3,47 +3,14 @@ import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useAuth } from "../../../hooks/useAuth"
 import { logReturnTransaction } from "../../../utils/borrowReturnLogger"
-
-interface EquipmentItem {
-  id: string
-  name: string
-  code: string
-  checked: boolean
-  quantity: number
-  quantityBorrowed: number
-  status: string
-  notes?: string
-  borrowId?: string
-  borrowDate?: string
-  borrowTime?: string
-  equipmentId?: string
-  expectedReturnDate?: string
-  expectedReturnTime?: string
-  equipmentCategory?: string
-  consumptionStatus?: string
-  // Asset return breakdown
-  returnGoodQty?: number
-  returnDamagedQty?: number
-  returnLostQty?: number
-}
+import type { ReturnEquipmentItem } from "../../../App"
 
 interface ReturnSummaryProps {
-  returnEquipment: EquipmentItem[]
-  setReturnEquipment: (equipment: EquipmentItem[]) => void
+  returnEquipment: ReturnEquipmentItem[]
+  setReturnEquipment: (equipment: ReturnEquipmentItem[]) => void
 }
 
-const getStatusColor = (status: string) => {
-  switch (status) {
-    case "ปกติ":
-      return "bg-green-600"
-    case "ชำรุด":
-      return "bg-red-600"
-    case "สูญหาย":
-      return "bg-orange-600"
-    default:
-      return "bg-gray-400"
-  }
-}
+
 
 export default function ReturnSummary({ returnEquipment, setReturnEquipment }: ReturnSummaryProps) {
   const navigate = useNavigate()
@@ -60,18 +27,6 @@ export default function ReturnSummary({ returnEquipment, setReturnEquipment }: R
   }, 0)
   const [showConfirmModal, setShowConfirmModal] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
-
-  // Get current date and time
-  const now = new Date()
-  const returnDate = now.toLocaleDateString('th-TH', { 
-    year: 'numeric', 
-    month: '2-digit', 
-    day: '2-digit' 
-  })
-  const returnTime = now.toLocaleTimeString('th-TH', { 
-    hour: '2-digit', 
-    minute: '2-digit' 
-  })
 
   // Get expected return date and time from first checked item
   const expectedReturnDate = checkedItems[0]?.expectedReturnDate || ''
@@ -274,7 +229,7 @@ export default function ReturnSummary({ returnEquipment, setReturnEquipment }: R
                   
                   try {
                     // Group items by borrowId
-                    const borrowsById: { [key: string]: EquipmentItem[] } = {}
+                    const borrowsById: { [key: string]: ReturnEquipmentItem[] } = {}
                     checkedItems.forEach(item => {
                       if (item.borrowId) {
                         if (!borrowsById[item.borrowId]) {
