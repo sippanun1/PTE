@@ -11,6 +11,24 @@ interface Room {
   code: string
   type: string
   status: "ว่าง" | "ไม่ว่าง"
+  usageDays?: {
+    monday: boolean
+    tuesday: boolean
+    wednesday: boolean
+    thursday: boolean
+    friday: boolean
+    saturday: boolean
+    sunday: boolean
+  }
+  timeRanges?: {
+    monday: { start: string; end: string }
+    tuesday: { start: string; end: string }
+    wednesday: { start: string; end: string }
+    thursday: { start: string; end: string }
+    friday: { start: string; end: string }
+    saturday: { start: string; end: string }
+    sunday: { start: string; end: string }
+  }
 }
 
 interface RoomBooking {
@@ -103,7 +121,25 @@ export default function AdminManageRooms() {
             id: doc.id,
             code: data.code || "",
             type: data.type || "",
-            status: data.status || "ว่าง"
+            status: data.status || "ว่าง",
+            usageDays: data.usageDays || {
+              monday: true,
+              tuesday: true,
+              wednesday: true,
+              thursday: true,
+              friday: true,
+              saturday: false,
+              sunday: false
+            },
+            timeRanges: data.timeRanges || {
+              monday: { start: "09:00", end: "17:00" },
+              tuesday: { start: "09:00", end: "17:00" },
+              wednesday: { start: "09:00", end: "17:00" },
+              thursday: { start: "09:00", end: "17:00" },
+              friday: { start: "09:00", end: "17:00" },
+              saturday: { start: "09:00", end: "17:00" },
+              sunday: { start: "09:00", end: "17:00" }
+            }
           })
         })
         setRooms(roomsList)
@@ -187,9 +223,9 @@ export default function AdminManageRooms() {
       const editFormData = {
         code: room.code,
         type: room.type,
-        customType: room.type === "ห้องอื่นๆ" ? "" : "",
+        customType: room.type === "ห้องอื่นๆ" ? room.type : "",
         image: "",
-        usageDays: {
+        usageDays: room.usageDays || {
           monday: true,
           tuesday: true,
           wednesday: true,
@@ -198,7 +234,7 @@ export default function AdminManageRooms() {
           saturday: false,
           sunday: false
         },
-        timeRanges: {
+        timeRanges: room.timeRanges || {
           monday: { start: "09:00", end: "17:00" },
           tuesday: { start: "09:00", end: "17:00" },
           wednesday: { start: "09:00", end: "17:00" },
@@ -291,7 +327,9 @@ export default function AdminManageRooms() {
         // Edit existing room in Firebase
         await updateDoc(doc(db, "rooms", editingRoomId), {
           code: formData.code,
-          type: finalType
+          type: finalType,
+          usageDays: formData.usageDays,
+          timeRanges: formData.timeRanges
         })
         
         setRooms(rooms.map(room =>
@@ -316,7 +354,9 @@ export default function AdminManageRooms() {
         const docRef = await addDoc(collection(db, "rooms"), {
           code: formData.code,
           type: finalType,
-          status: "ว่าง"
+          status: "ว่าง",
+          usageDays: formData.usageDays,
+          timeRanges: formData.timeRanges
         })
         
         const newRoom: Room = {

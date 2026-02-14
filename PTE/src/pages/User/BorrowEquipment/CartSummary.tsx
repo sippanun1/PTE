@@ -165,6 +165,11 @@ export default function CartSummary({ cartItems, setCartItems }: CartSummaryProp
                           "ไม่ระบุประเภท"
                         )}
                       </p>
+                      {item.serialCode && (
+                        <p className="text-xs text-blue-600 font-medium mt-1">
+                          รหัส: {item.serialCode}
+                        </p>
+                      )}
                       <p className="text-xs text-gray-500 mt-1">
                         สต็อค {item.available} {item.unit}
                       </p>

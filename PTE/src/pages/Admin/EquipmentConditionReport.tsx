@@ -65,11 +65,17 @@ export default function EquipmentConditionReport() {
               }
               
               const data = conditionMap.get(key)!
-              // Add asset code (using borrowId as reference, could be actual asset code)
-              data.assetCodes.push(txn.borrowId)
-              // Add notes if available
-              if (item.returnNotes) {
-                data.notes.push(item.returnNotes)
+              // Add asset codes (plural - could be multiple per item)
+              if (item.assetCodeConditions && item.assetCodeConditions.length > 0) {
+                item.assetCodeConditions.forEach(ac => {
+                  data.assetCodes.push(ac.code)
+                  data.notes.push(ac.notes || item.returnNotes || "")
+                })
+              } else if (item.assetCodes && item.assetCodes.length > 0) {
+                item.assetCodes.forEach(code => {
+                  data.assetCodes.push(code)
+                  data.notes.push(item.returnNotes || "")
+                })
               }
               data.borrowIds.push(txn.borrowId)
               data.borrowerNames.push(txn.userName)
@@ -149,15 +155,11 @@ export default function EquipmentConditionReport() {
     try {
       const docId = selectedEquipment.documentIds[editingItemIndex]
       const itemIndex = selectedEquipment.borrowItemIndices[editingItemIndex]
+      const serialCode = selectedEquipment.assetCodes[editingItemIndex]
       
       const docRef = doc(db, "borrowHistory", docId)
       
       // Get the current document to preserve other data
-      // Unused query - using simple getDocs instead
-      // const borrowHistoryQuery = query(
-      //   collection(db, "borrowHistory"),
-      //   where("__name__", "==", docId)
-      // )
       const querySnapshot = await getDocs(query(collection(db, "borrowHistory")))
       let foundDoc = null
       
@@ -178,6 +180,28 @@ export default function EquipmentConditionReport() {
         }
         
         await updateDoc(docRef, { equipmentItems: updatedItems })
+        
+        // If condition changed to "ปกติ", mark the asset code document as available
+        // NEW STRUCTURE (Option A): Each serial code is its own document
+        if (newCondition === "ปกติ" && serialCode) {
+          try {
+            // Find the equipment document with this serial code and set available: true
+            const equipmentQuery = query(
+              collection(db, "equipment"),
+              where("serialCode", "==", serialCode)
+            )
+            const equipmentSnapshot = await getDocs(equipmentQuery)
+            
+            if (!equipmentSnapshot.empty) {
+              const equipmentDocRef = equipmentSnapshot.docs[0].ref
+              await updateDoc(equipmentDocRef, {
+                available: true
+              })
+            }
+          } catch (error) {
+            console.error("Error updating equipment availability:", error)
+          }
+        }
         
         // Update local state
         const updated = selectedEquipment.notes.slice()

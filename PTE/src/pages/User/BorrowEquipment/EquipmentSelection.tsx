@@ -5,7 +5,6 @@ import { db } from "../../../firebase/firebase"
 import { useAuth } from "../../../hooks/useAuth"
 import shoppingCartIcon from "../../../assets/shoppingcart.svg"
 import type { SelectedEquipment } from "../../../App"
-import type { BorrowTransaction } from "../../../utils/borrowReturnLogger"
 
 // Default equipment types with subtypes
 const defaultEquipmentTypes: { [key: string]: string[] } = {
@@ -28,6 +27,7 @@ interface Equipment {
   picture?: string
   inStock: boolean
   available: number
+  serialCode?: string
   equipmentType?: string
   equipmentSubType?: string
 }
@@ -93,45 +93,31 @@ export default function EquipmentSelection({ setCartItems }: EquipmentSelectionP
         })
         setEquipmentTypes(customTypes)
 
-        // Load all equipment
+        // Load all equipment where available: true
+        // With new structure (Option A), each serial code is its own document
         const querySnapshot = await getDocs(collection(db, "equipment"))
         const rawList: Equipment[] = []
         querySnapshot.forEach((doc) => {
           const data = doc.data()
-          rawList.push({
-            id: doc.id,
-            name: data.name,
-            category: data.category,
-            quantity: data.quantity || 0,
-            unit: data.unit || "ชิ้น",
-            picture: data.picture,
-            inStock: (data.quantity || 0) > 0,
-            available: data.quantity || 0,
-            equipmentType: data.equipmentType || "",
-            equipmentSubType: data.equipmentSubType || ""
-          })
+          // Only include documents where available is true (only available items can be borrowed)
+          if (data.available === true) {
+            rawList.push({
+              id: doc.id,
+              name: data.name,
+              category: data.category,
+              quantity: 1, // Each document represents one serial code/item
+              unit: data.unit || "ชิ้น",
+              picture: data.picture,
+              inStock: true, // If available: true and loaded, it's in stock
+              available: 1, // One unit available
+              serialCode: data.serialCode,
+              equipmentType: data.equipmentType || "",
+              equipmentSubType: data.equipmentSubType || ""
+            })
+          }
         })
         
-        // Get borrow history to calculate broken/lost items
-        const borrowHistorySnapshot = await getDocs(collection(db, "borrowHistory"))
-        const brokenLostByEquipment = new Map<string, number>()
-        
-        borrowHistorySnapshot.forEach((doc) => {
-          const txn = doc.data() as BorrowTransaction
-          
-          txn.equipmentItems?.forEach((item) => {
-            // Count returned items as broken or lost (exclude from available)
-            if (txn.status === "returned" && (item.returnCondition === "ชำรุด" || item.returnCondition === "สูญหาย")) {
-              const equipmentId = item.equipmentId || ""
-              brokenLostByEquipment.set(
-                equipmentId,
-                (brokenLostByEquipment.get(equipmentId) || 0) + item.quantityBorrowed
-              )
-            }
-          })
-        })
-        
-        // Group equipment by name
+        // Group equipment by name for display (multiple serial codes of same equipment)
         const grouped: { [key: string]: Equipment[] } = {}
         rawList.forEach((item) => {
           if (!grouped[item.name]) {
@@ -140,22 +126,18 @@ export default function EquipmentSelection({ setCartItems }: EquipmentSelectionP
           grouped[item.name].push(item)
         })
         
-        // Merge items with same name and calculate actual available quantity
+        // Create display list grouping same equipment together
         const mergedList: Equipment[] = Object.entries(grouped).map(([_name, items]) => {
-          const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0)
           const firstItem = items[0]
-          const equipmentId = firstItem.id
           
-          // The Firebase quantity field already has borrowed items subtracted
-          // Only subtract broken/lost items
-          const brokenLost = brokenLostByEquipment.get(equipmentId) || 0
-          const availableQuantity = Math.max(0, totalQuantity - brokenLost)
+          // Show number of available serial codes for this equipment type
+          const availableCount = items.length
           
           return {
             ...firstItem,
-            quantity: totalQuantity,
-            available: availableQuantity,
-            inStock: availableQuantity > 0
+            quantity: availableCount, // Number of available serial codes
+            available: availableCount,
+            inStock: availableCount > 0
           }
         })
         
