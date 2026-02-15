@@ -255,9 +255,10 @@ export default function EquipmentConditionReport() {
               text-sm font-medium
               hover:bg-gray-100
               transition
+              flex items-center justify-center gap-2
             "
           >
-            ← ย้อนกลับ
+            <img src="/arrow.svg" alt="back" className="w-5 h-5" />
           </button>
 
           {/* Search Box */}

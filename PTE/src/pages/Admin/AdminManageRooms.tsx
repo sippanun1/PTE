@@ -497,13 +497,13 @@ export default function AdminManageRooms() {
       <div className="mt-6 flex justify-center">
         <div className="w-full max-w-[360px] px-4 flex flex-col items-center pb-6">
         {/* Back and Add Room Buttons */}
-          <div className="w-full flex gap-3 mt-8 mb-6">
+          <div className="w-full flex gap-3 mt-6 mb-6">
             <button
               onClick={() => navigate(-1)}
               className="
-                w-2/5
+                flex-1
                 py-3
-                rounded-lg
+                rounded-full
                 border border-gray-400
                 text-gray-600
                 text-sm font-medium
@@ -512,20 +512,20 @@ export default function AdminManageRooms() {
                 flex items-center justify-center gap-2
               "
             >
-              ย้อนกลับ
+              <img src="/arrow.svg" alt="back" className="w-5 h-5" />
             </button>
             <span className="w-1/5"> </span>
             <button
               onClick={handleAddRoom}
               className="
-                w-2/5
+                flex-1
                 py-3
+                rounded-full
                 bg-orange-500
                 text-white
                 text-sm font-semibold
                 hover:bg-orange-600
                 transition
-                flex items-center justify-center gap-2
               "
             >
               + เพิ่มห้องใหม่

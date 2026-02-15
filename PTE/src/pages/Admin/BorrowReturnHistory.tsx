@@ -14,7 +14,7 @@ export default function BorrowReturnHistory() {
   const [transactions, setTransactions] = useState<BorrowTransaction[]>([])
   const [loading, setLoading] = useState(true)
   const [processingId, setProcessingId] = useState<string | null>(null)
-  const [filter, setFilter] = useState<"all" | "borrowed" | "pending_return" | "returned" | "cancelled">("all")
+  const [filter, setFilter] = useState<"all" | "borrowed" | "pending_return" | "returned" | "awaiting_acknowledgment">("all")
   const [searchTerm, setSearchTerm] = useState("")
   const [borrowTypeFilter, setBorrowTypeFilter] = useState<"all" | "during-class" | "teaching" | "outside">("all")
   const [dateFilter, setDateFilter] = useState<"all" | "today" | "week" | "month" | "custom">("all")
@@ -117,7 +117,11 @@ export default function BorrowReturnHistory() {
   }
 
   const filteredTransactions = transactions.filter((txn) => {
-    const matchesStatus = filter === "all" || txn.status === filter
+    const matchesStatus = filter === "all" 
+      ? true 
+      : filter === "awaiting_acknowledgment" 
+        ? txn.status === "borrowed" && !txn.acknowledgedAt
+        : txn.status === filter
     const matchesBorrowType = borrowTypeFilter === "all" || txn.borrowType === borrowTypeFilter
     const matchesSearch =
       txn.userName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -210,9 +214,10 @@ export default function BorrowReturnHistory() {
               hover:bg-gray-100
               transition
               mb-6
+              flex items-center justify-center gap-2
             "
           >
-            ย้อนกลับ
+            <img src="/arrow.svg" alt="back" className="w-5 h-5" />
           </button>
 
           {/* Search Bar */}
@@ -271,10 +276,10 @@ export default function BorrowReturnHistory() {
                   <div className="flex gap-2 flex-wrap">
                     {[
                       { key: 'all', label: 'ทั้งหมด', color: 'gray' },
+                      { key: 'awaiting_acknowledgment', label: 'รอการรับทราบ', color: 'blue' },
                       { key: 'borrowed', label: 'ยังไม่ได้คืน', color: 'yellow' },
                       { key: 'pending_return', label: 'รอการอนุมัติคืน', color: 'purple' },
-                      { key: 'returned', label: 'คืนแล้ว', color: 'green' },
-                      { key: 'cancelled', label: 'ยกเลิก', color: 'red' }
+                      { key: 'returned', label: 'คืนแล้ว', color: 'green' }
                     ].map((status) => (
                       <button
                         key={status.key}
@@ -440,7 +445,7 @@ export default function BorrowReturnHistory() {
                     <div className="text-right text-xs">
                       {txn.status === "borrowed" && !txn.acknowledgedAt && (
                         <div className="bg-yellow-50 text-yellow-700 px-2 py-1 rounded">
-                          รอรับทราบ
+                          รอการรับทราบ
                         </div>
                       )}
                       {txn.acknowledgedBy && (

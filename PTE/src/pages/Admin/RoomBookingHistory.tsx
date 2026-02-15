@@ -304,9 +304,19 @@ export default function RoomBookingHistory() {
           {/* Back Button */}
           <button
             onClick={() => navigate(-1)}
-            className="mt-4 mb-6 px-4 py-2 border border-gray-400 text-gray-600 text-sm rounded-lg hover:bg-gray-100 transition flex items-center gap-2"
+            className="                            
+              w-full
+              mb-4
+              py-2
+              rounded-full
+              border border-gray-400
+              text-gray-600
+              text-sm font-medium
+              hover:bg-gray-100
+              transition
+              flex items-center justify-center gap-2"
           >
-            ← ย้อนกลับ
+            <img src="/arrow.svg" alt="back" className="w-5 h-5" />
           </button>
 
           {/* Search Bar */}

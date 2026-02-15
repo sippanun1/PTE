@@ -281,6 +281,31 @@ export default function RoomAvailability({ setBookingData }: RoomAvailabilityPro
       {/* ===== CONTENT ===== */}
       <div className="mt-6 flex justify-center">
         <div className="w-full max-w-[360px] px-4 flex flex-col items-center">
+          {/* Back Button */}
+          <button
+            onClick={() => {
+              if (window.history.length > 1) {
+                navigate(-1)
+              } else {
+                navigate('/room-booking')
+              }
+            }}
+            className="
+              w-full
+              py-3
+              rounded-full
+              border border-gray-400
+              text-gray-600
+              text-sm font-medium
+              hover:bg-gray-100
+              transition
+              mb-6
+              flex items-center justify-center gap-2
+            "
+          >
+            <img src="/arrow.svg" alt="back" className="w-5 h-5" />
+          </button>
+
           {/* Date Navigation */}
           <div className="w-full flex gap-2 mb-6 items-center justify-between">
             <button
@@ -402,30 +427,6 @@ export default function RoomAvailability({ setBookingData }: RoomAvailabilityPro
               <p className="text-gray-600">ไม่มีข้อมูลห้องว่าง</p>
             </div>
           )}
-
-          {/* Back Button */}
-          <button
-            onClick={() => {
-              if (window.history.length > 1) {
-                navigate(-1)
-              } else {
-                navigate('/room-booking')
-              }
-            }}
-            className="
-              w-full
-              py-3
-              rounded-full
-              border border-gray-400
-              text-gray-600
-              text-sm font-medium
-              hover:bg-gray-100
-              transition
-              mb-6
-            "
-          >
-            ย้อนกลับ
-          </button>
         </div>
       </div>
 

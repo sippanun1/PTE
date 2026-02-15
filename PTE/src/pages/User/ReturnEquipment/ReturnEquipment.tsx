@@ -183,6 +183,25 @@ export default function ReturnEquipment({ setReturnEquipment }: ReturnEquipmentP
       {/* ===== CONTENT ===== */}
       <div className="mt-6 flex justify-center">
         <div className="w-full max-w-[360px] px-4 flex flex-col items-center">
+          {/* Back Button */}
+          <button
+            onClick={() => navigate(-1)}
+            className="
+              w-full
+              py-3
+              rounded-full
+              border border-gray-400
+              text-gray-600
+              text-sm font-medium
+              hover:bg-gray-100
+              transition
+              mb-6
+              flex items-center justify-center gap-2
+            "
+          >
+            <img src="/arrow.svg" alt="back" className="w-5 h-5" />
+          </button>
+
           {/* User Info Box */}
           {loading ? (
             <div className="w-full h-24 bg-gray-100 rounded-lg animate-pulse mb-6"></div>
@@ -252,56 +271,40 @@ export default function ReturnEquipment({ setReturnEquipment }: ReturnEquipmentP
             )}
           </div>
 
-          {/* Buttons */}
-          <div className="w-full flex gap-3 mb-6">
-            <button
-              onClick={() => navigate(-1)}
-              className="
-                flex-1
-                px-4 py-2
-                rounded-full
-                border border-gray-400
-                text-sm text-gray-600
-                font-medium
-                hover:bg-gray-100
-                transition
-              "
-            >
-              ย้อนกลับ
-            </button>
-            <button
-              onClick={() => {
-                const selectedItems = equipment.filter(item => item.checked)
-                if (selectedItems.length === 0) {
-                  alert("กรุณาเลือกอุปกรณ์ที่ต้องคืน")
-                  return
-                }
-                
-                // Add asset code conditions to selected items
-                const itemsWithConditions = selectedItems.map(item => ({
-                  ...item,
-                  assetCodeConditions: assetCodeMap.get(`${item.borrowId}-${item.id}`) || []
-                }))
-                
-                setReturnEquipment(itemsWithConditions)
-                navigate('/return/summary')
-              }}
-              disabled={equipment.length === 0}
-              className="
-                flex-1
-                px-4 py-2
-                rounded-full
-                bg-orange-500
-                text-white
-                text-sm font-medium
-                hover:bg-orange-600
-                transition
-                disabled:bg-gray-300
-              "
-            >
-              ถัดไป
-            </button>
-          </div>
+          {/* Button */}
+          <button
+            onClick={() => {
+              const selectedItems = equipment.filter(item => item.checked)
+              if (selectedItems.length === 0) {
+                alert("กรุณาเลือกอุปกรณ์ที่ต้องคืน")
+                return
+              }
+              
+              // Add asset code conditions to selected items
+              const itemsWithConditions = selectedItems.map(item => ({
+                ...item,
+                assetCodeConditions: assetCodeMap.get(`${item.borrowId}-${item.id}`) || []
+              }))
+              
+              setReturnEquipment(itemsWithConditions)
+              navigate('/return/summary')
+            }}
+            disabled={equipment.length === 0}
+            className="
+              w-full
+              px-4 py-3
+              rounded-full
+              bg-orange-500
+              text-white
+              text-sm font-medium
+              hover:bg-orange-600
+              transition
+              disabled:bg-gray-300
+              mb-6
+            "
+          >
+            ถัดไป
+          </button>
         </div>
       </div>
 

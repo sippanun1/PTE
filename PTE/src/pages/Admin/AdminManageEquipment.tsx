@@ -923,9 +923,10 @@ export default function AdminManageEquipment() {
                 text-sm font-medium
                 hover:bg-gray-100
                 transition
+                flex items-center justify-center gap-2
               "
             >
-              <img src="PTE\public\arrow.svg" alt="arrow" />
+            <img src="/arrow.svg" alt="back" className="w-5 h-5" />
             </button>
             <button
               onClick={handleAddEquipment}

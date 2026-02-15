@@ -223,6 +223,25 @@ export default function ConfirmSummary({ cartItems }: ConfirmSummaryProps) {
       {/* ===== CONTENT ===== */}
       <div className="mt-6 flex justify-center">
         <div className="w-full max-w-[360px] px-4 flex flex-col items-center">
+          {/* Back Button */}
+          <button
+            onClick={() => navigate(-1)}
+            className="
+              w-full
+              py-3
+              rounded-full
+              border border-gray-400
+              text-gray-600
+              text-sm font-medium
+              hover:bg-gray-100
+              transition
+              mb-6
+              flex items-center justify-center gap-2
+            "
+          >
+            <img src="/arrow.svg" alt="back" className="w-5 h-5" />
+          </button>
+
           {/* Summary Header */}
           <div className="w-full bg-gray-100 rounded-lg p-4 mb-6">
             <div className="flex items-center justify-between mb-2">
@@ -317,38 +336,22 @@ export default function ConfirmSummary({ cartItems }: ConfirmSummaryProps) {
           </div>
 
           {/* Buttons */}
-          <div className="w-full flex gap-3 mb-6">
-            <button
-              onClick={() => navigate(-1)}
-              className="
-                flex-1
-                px-4 py-2
-                rounded-full
-                border border-gray-400
-                text-sm text-gray-600
-                font-medium
-                hover:bg-gray-100
-                transition
-              "
-            >
-              ย้อนกลับ
-            </button>
-            <button
-              onClick={handleConfirm}
-              disabled={isSubmitting}
-              className={`
-                flex-1
-                px-4 py-2
-                rounded-full
-                text-white
-                text-sm font-medium
-                transition
-                ${isSubmitting ? "bg-gray-400 cursor-not-allowed" : "bg-orange-500 hover:bg-orange-600"}
-              `}
-            >
-              {isSubmitting ? "กำลังบันทึก..." : "เสร็จสิ้น"}
-            </button>
-          </div>
+          <button
+            onClick={handleConfirm}
+            disabled={isSubmitting}
+            className={`
+              w-full
+              px-4 py-3
+              rounded-full
+              text-white
+              text-sm font-medium
+              transition
+              mb-6
+              ${isSubmitting ? "bg-gray-400 cursor-not-allowed" : "bg-orange-500 hover:bg-orange-600"}
+            `}
+          >
+            {isSubmitting ? "กำลังบันทึก..." : "เสร็จสิ้น"}
+          </button>
         </div>
       </div>
     </div>
