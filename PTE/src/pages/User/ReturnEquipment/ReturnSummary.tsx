@@ -131,19 +131,25 @@ export default function ReturnSummary({ returnEquipment, setReturnEquipment }: R
                       <div className="text-center p-2 bg-green-50 border border-green-200 rounded">
                         <p className="text-xs text-gray-600 font-semibold">ปกติ</p>
                         <p className="text-sm font-bold text-green-700">
-                          {item.assetCodeConditions?.filter(c => c.condition === "ปกติ").length || item.returnGoodQty || 0}
+                          {item.assetCodeConditions && item.assetCodeConditions.length > 0
+                            ? item.assetCodeConditions.filter(c => c.condition === "ปกติ").length
+                            : item.returnGoodQty || 0}
                         </p>
                       </div>
                       <div className="text-center p-2 bg-orange-50 border border-orange-200 rounded">
                         <p className="text-xs text-gray-600 font-semibold">ชำรุด</p>
                         <p className="text-sm font-bold text-orange-700">
-                          {item.assetCodeConditions?.filter(c => c.condition === "ชำรุด").length || item.returnDamagedQty || 0}
+                          {item.assetCodeConditions && item.assetCodeConditions.length > 0
+                            ? item.assetCodeConditions.filter(c => c.condition === "ชำรุด").length
+                            : item.returnDamagedQty || 0}
                         </p>
                       </div>
                       <div className="text-center p-2 bg-red-50 border border-red-200 rounded">
                         <p className="text-xs text-gray-600 font-semibold">สูญหาย</p>
                         <p className="text-sm font-bold text-red-700">
-                          {item.assetCodeConditions?.filter(c => c.condition === "สูญหาย").length || item.returnLostQty || 0}
+                          {item.assetCodeConditions && item.assetCodeConditions.length > 0
+                            ? item.assetCodeConditions.filter(c => c.condition === "สูญหาย").length
+                            : item.returnLostQty || 0}
                         </p>
                       </div>
                     </div>

@@ -429,7 +429,7 @@ export default function EquipmentConditionReport() {
 
       {/* ===== DETAIL MODAL ===== */}
       {selectedEquipment && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center z-50 p-4 overflow-y-auto">
+        <div className="fixed inset-0 backdrop-blur-xs bg-opacity-50 flex items-start justify-center z-50 p-4 overflow-y-auto">
           <div className="bg-white rounded-lg shadow-lg p-6 max-w-2xl w-full mt-10">
             <div className="flex justify-between items-start mb-6">
               <div>

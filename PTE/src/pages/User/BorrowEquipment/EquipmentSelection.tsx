@@ -95,17 +95,20 @@ export default function EquipmentSelection({ setCartItems }: EquipmentSelectionP
 
         // Load all equipment where available: true
         // With new structure (Option A), each serial code is its own document
+        // For consumables: available field must be true AND quantity > 0
         const querySnapshot = await getDocs(collection(db, "equipment"))
         const rawList: Equipment[] = []
         querySnapshot.forEach((doc) => {
           const data = doc.data()
           // Only include documents where available is true (only available items can be borrowed)
-          if (data.available === true) {
+          // For consumables with quantity field, also check quantity > 0
+          const isAvailable = data.available === true || (data.category === "consumable" && data.quantity > 0)
+          if (isAvailable) {
             rawList.push({
               id: doc.id,
               name: data.name,
               category: data.category,
-              quantity: 1, // Each document represents one serial code/item
+              quantity: data.category === "consumable" ? (data.quantity || 0) : 1, // For consumables, use actual quantity; for assets, 1 per serial code
               unit: data.unit || "ชิ้น",
               picture: data.picture,
               inStock: true, // If available: true and loaded, it's in stock
@@ -130,12 +133,14 @@ export default function EquipmentSelection({ setCartItems }: EquipmentSelectionP
         const mergedList: Equipment[] = Object.entries(grouped).map(([_name, items]) => {
           const firstItem = items[0]
           
-          // Show number of available serial codes for this equipment type
-          const availableCount = items.length
+          // For assets: count available serial codes; For consumables: use quantity field
+          const availableCount = firstItem.category === "consumable" 
+            ? (firstItem.quantity || 0)  // Use quantity field for consumables
+            : items.length  // Count serial codes for assets
           
           return {
             ...firstItem,
-            quantity: availableCount, // Number of available serial codes
+            quantity: availableCount,
             available: availableCount,
             inStock: availableCount > 0
           }

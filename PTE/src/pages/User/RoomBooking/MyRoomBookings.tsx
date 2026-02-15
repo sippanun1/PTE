@@ -344,7 +344,7 @@ export default function MyRoomBookings({ setReturnBookingData }: MyRoomBookingsP
 
       {/* Details Modal */}
       {selectedBooking && (
-        <div className="fixed inset-0 backdrop-blur-xs bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 backdrop-blur-xs bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-lg p-6 max-w-sm w-full">
             <div className="flex justify-between items-start mb-4">
               <h2 className="text-lg font-bold text-gray-900">รายละเอียดการจอง</h2>
@@ -403,7 +403,7 @@ export default function MyRoomBookings({ setReturnBookingData }: MyRoomBookingsP
 
       {/* Cancellation Reason Modal */}
       {showCancellationModal && bookingToCancel && (
-        <div className="fixed inset-0 backdrop-blur-xs bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 backdrop-blur-xs bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-lg p-6 max-w-sm w-full">
             <div className="flex justify-between items-start mb-4">
               <h2 className="text-lg font-bold text-gray-900">ยกเลิกการจอง</h2>

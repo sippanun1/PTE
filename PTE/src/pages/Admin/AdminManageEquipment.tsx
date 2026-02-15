@@ -28,6 +28,7 @@ interface Equipment {
   serialCode?: string
   equipmentType?: string
   equipmentSubType?: string
+  available?: boolean
 }
 
 interface AddStockForm {
@@ -132,6 +133,9 @@ export default function AdminManageEquipment() {
     equipmentType: "",
     equipmentSubType: ""
   })
+  // Loading states for double-click prevention
+  const [isSubmittingEquipment, setIsSubmittingEquipment] = useState(false)
+  const [isSubmittingStock, setIsSubmittingStock] = useState(false)
   // Custom equipment types (loaded from Firebase)
   const [equipmentTypes, setEquipmentTypes] = useState<{ [key: string]: string[] }>(defaultEquipmentTypes)
   const [showAddTypeModal, setShowAddTypeModal] = useState(false)
@@ -170,7 +174,7 @@ export default function AdminManageEquipment() {
             id: doc.data().id || doc.id,
             name: doc.data().name,
             category: doc.data().category,
-            quantity: doc.data().quantity,
+            quantity: doc.data().quantity || (doc.data().serialCode ? 1 : 0), // Default: 1 for assets, 0 for consumables
             unit: doc.data().unit || "ชิ้น",
             picture: doc.data().picture,
             equipmentType: doc.data().equipmentType || "",
@@ -255,6 +259,9 @@ export default function AdminManageEquipment() {
   }
 
   const handleAddEquipmentSubmit = async () => {
+    // Prevent double submission
+    if (isSubmittingEquipment) return
+    
     const isAsset = addEquipmentForm.category === "asset"
     const quantityNum = parseInt(addEquipmentForm.quantity) || 0
     
@@ -277,6 +284,7 @@ export default function AdminManageEquipment() {
     }
     
     if (addEquipmentForm.nameThai && addEquipmentForm.quantity) {
+      setIsSubmittingEquipment(true)
       try {
         if (isAsset) {
           // Create separate equipment record for each serial code
@@ -285,6 +293,7 @@ export default function AdminManageEquipment() {
             name: `${addEquipmentForm.nameThai}${addEquipmentForm.nameEnglish ? ` (${addEquipmentForm.nameEnglish})` : ""}`,
             serialCode: serialCode,
             category: addEquipmentForm.category,
+            quantity: 1, // Each asset serial code is 1 unit
             unit: addEquipmentForm.unit,
             picture: addEquipmentForm.picture,
             equipmentType: addEquipmentForm.equipmentType,
@@ -313,7 +322,8 @@ export default function AdminManageEquipment() {
             unit: addEquipmentForm.unit,
             picture: addEquipmentForm.picture,
             equipmentType: addEquipmentForm.equipmentType,
-            equipmentSubType: addEquipmentForm.equipmentSubType
+            equipmentSubType: addEquipmentForm.equipmentSubType,
+            available: true // Consumables are available when created
           }
           
           // Save to Firestore
@@ -339,6 +349,8 @@ export default function AdminManageEquipment() {
       } catch (error) {
         console.error("Error adding equipment:", error)
         alert("เกิดข้อผิดพลาดในการบันทึกข้อมูล")
+      } finally {
+        setIsSubmittingEquipment(false)
       }
     }
   }
@@ -805,9 +817,13 @@ export default function AdminManageEquipment() {
   }
 
   const handleAddStockConfirm = async () => {
+    // Prevent double submission
+    if (isSubmittingStock) return
+    
     const isAsset = addStockForm.equipmentCategory === "asset"
     const existingUnit = equipment.find(e => e.name === addStockForm.equipmentName)?.unit || "ชิ้น"
     
+    setIsSubmittingStock(true)
     try {
       if (isAsset) {
         // Add each asset as a separate equipment record with serialCode
@@ -816,6 +832,7 @@ export default function AdminManageEquipment() {
           name: addStockForm.equipmentName,
           serialCode: serialCode,
           category: addStockForm.equipmentCategory,
+          quantity: 1, // Each asset serial code is 1 unit
           unit: existingUnit,
           available: true // New stock is available
         }))
@@ -839,7 +856,8 @@ export default function AdminManageEquipment() {
         for (const docSnap of querySnapshot.docs) {
           if (docSnap.id === addStockForm.equipmentId) {
             await updateDoc(doc(db, "equipment", docSnap.id), {
-              quantity: newQuantity
+              quantity: newQuantity,
+              available: true // Ensure consumable is marked available
             })
             break
           }
@@ -872,6 +890,8 @@ export default function AdminManageEquipment() {
     } catch (error) {
       console.error("Error adding stock:", error)
       alert("เกิดข้อผิดพลาดในการบันทึกข้อมูล")
+    } finally {
+      setIsSubmittingStock(false)
     }
   }
 
@@ -1279,7 +1299,7 @@ export default function AdminManageEquipment() {
 
       {/* ===== ADD EQUIPMENT MODAL ===== */}
       {showAddEquipmentModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start z-50">
+        <div className="fixed inset-0 backdrop-blur-xs bg-opacity-50 flex items-start z-50">
           <div className="w-screen h-screen bg-white overflow-y-auto">
             {/* Modal Header */}
             <div className="bg-orange-500 text-white p-4 text-center font-semibold sticky top-0">
@@ -1486,9 +1506,10 @@ export default function AdminManageEquipment() {
                 </button>
                 <button
                   onClick={handleAddEquipmentSubmit}
-                  className="px-6 py-3 bg-orange-500 text-white rounded-full font-semibold hover:bg-orange-600 transition"
+                  disabled={isSubmittingEquipment}
+                  className="px-6 py-3 bg-orange-500 text-white rounded-full font-semibold hover:bg-orange-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  บันทึก
+                  {isSubmittingEquipment ? "กำลังบันทึก..." : "บันทึก"}
                 </button>
               </div>
             </div>
@@ -2194,9 +2215,10 @@ export default function AdminManageEquipment() {
               </button>
               <button
                 onClick={handleAddStockConfirm}
-                className="flex-1 py-2 bg-orange-500 text-white rounded font-semibold hover:bg-orange-600 transition"
+                disabled={isSubmittingStock}
+                className="flex-1 py-2 bg-orange-500 text-white rounded font-semibold hover:bg-orange-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                ตกลง
+                {isSubmittingStock ? "กำลังบันทึก..." : "ตกลง"}
               </button>
             </div>
           </div>

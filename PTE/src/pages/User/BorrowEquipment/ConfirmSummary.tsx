@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
-import { doc, getDoc, collection, getDocs, query, where } from "firebase/firestore"
+import { doc, getDoc, collection, getDocs, query, where, writeBatch } from "firebase/firestore"
 import { db } from "../../../firebase/firebase"
 import Header from "../../../components/Header"
 import { useAuth } from "../../../hooks/useAuth"
@@ -164,6 +164,38 @@ export default function ConfirmSummary({ cartItems }: ConfirmSummaryProps) {
         userIdNumber,
         expectedReturnTime || borrowTime
       )
+
+      // Update equipment availability in Firebase
+      const batch = writeBatch(db)
+      
+      for (const item of cartItems) {
+        if (item.category === "consumable") {
+          // For consumables: decrement quantity
+          const q = query(collection(db, "equipment"), where("name", "==", item.name))
+          const snapshot = await getDocs(q)
+          
+          snapshot.forEach((docSnap) => {
+            const currentQty = docSnap.data().quantity || 0
+            const newQty = Math.max(0, currentQty - item.selectedQuantity)
+            
+            batch.update(doc(db, "equipment", docSnap.id), {
+              quantity: newQty,
+              available: newQty > 0 // Mark as unavailable if quantity reaches 0
+            })
+          })
+        } else if (item.category === "asset") {
+          // For assets: mark borrowed serial codes as unavailable
+          const selectedCodes = assetCodesMap.get(item.id)?.filter(c => c.selected) || []
+          
+          selectedCodes.forEach((code) => {
+            batch.update(doc(db, "equipment", code.equipmentId), {
+              available: false // Mark as borrowed/unavailable
+            })
+          })
+        }
+      }
+      
+      await batch.commit()
 
       // Navigate to completion page
       navigate('/borrow/completion')

@@ -1,4 +1,4 @@
-import { doc, setDoc, collection, getDoc, updateDoc, query, where, getDocs } from "firebase/firestore"
+import { doc, setDoc, collection, getDoc, updateDoc, query, where, getDocs, writeBatch } from "firebase/firestore"
 import { db } from "../firebase/firebase"
 import type { User } from "firebase/auth"
 
@@ -233,8 +233,35 @@ export async function logReturnTransaction(
     }
 
     // Update equipment quantities based on return condition and equipment type
-    // With new structure, no quantity tracking needed - availability is at document level
-    // But we still track per-code conditions for return history
+    // For consumables: add returned quantity back to inventory
+    if (returnedEquipmentItems && returnedEquipmentItems.length > 0) {
+      const batch = writeBatch(db)
+      
+      for (const item of returnedEquipmentItems) {
+        // Only update quantities for consumables
+        if (item.equipmentCategory === "consumable" && item.quantityReturned !== undefined && item.quantityReturned > 0) {
+          try {
+            // Find equipment by name
+            const q = query(collection(db, "equipment"), where("name", "==", item.equipmentName))
+            const snapshot = await getDocs(q)
+            
+            snapshot.forEach((docSnap) => {
+              const currentQty = docSnap.data().quantity || 0
+              const newQty = currentQty + item.quantityReturned
+              
+              batch.update(doc(db, "equipment", docSnap.id), {
+                quantity: newQty,
+                available: newQty > 0
+              })
+            })
+          } catch (error) {
+            console.error(`Error updating quantity for ${item.equipmentName}:`, error)
+          }
+        }
+      }
+      
+      await batch.commit()
+    }
 
     // Update borrow transaction with return information
     const updateData: Partial<BorrowTransaction> = {

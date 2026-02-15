@@ -307,7 +307,7 @@ export default function ReturnEquipment({ setReturnEquipment }: ReturnEquipmentP
 
       {/* Details Modal */}
       {selectedBorrow && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center z-50 p-4 overflow-y-auto">
+        <div className="fixed inset-0 backdrop-blur-xs bg-opacity-50 flex items-start justify-center z-50 p-4 overflow-y-auto">
           <div className="bg-white rounded-lg shadow-lg p-6 max-w-2xl w-full mt-10">
             <div className="flex justify-between items-start mb-6">
               <div>
@@ -623,7 +623,13 @@ export default function ReturnEquipment({ setReturnEquipment }: ReturnEquipmentP
                     }
                   }
                   
-                  setReturnEquipment(selectedItems)
+                  // Add asset code conditions to selected items
+                  const itemsWithConditions = selectedItems.map(item => ({
+                    ...item,
+                    assetCodeConditions: assetCodeMap.get(`${item.borrowId}-${item.id}`) || []
+                  }))
+                  
+                  setReturnEquipment(itemsWithConditions)
                   setSelectedBorrow(null)
                   navigate('/return/summary')
                 }}
