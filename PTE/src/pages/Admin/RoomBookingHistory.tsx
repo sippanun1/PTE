@@ -43,6 +43,7 @@ export default function RoomBookingHistory() {
   const [cancellationReason, setCancellationReason] = useState("")
   const [returnDetailsModalOpen, setReturnDetailsModalOpen] = useState(false)
   const [selectedReturnBooking, setSelectedReturnBooking] = useState<RoomBookingRecord | null>(null)
+  const [showPendingOnly, setShowPendingOnly] = useState(false)
 
   // Load booking history from Firebase
   useEffect(() => {
@@ -263,7 +264,7 @@ export default function RoomBookingHistory() {
   }
 
   // Check if any filter is active
-  const hasActiveFilters = filterStatus !== 'all' || roomTypeFilter !== 'all' || dateFilter !== 'all' || searchTerm !== ''
+  const hasActiveFilters = filterStatus !== 'all' || roomTypeFilter !== 'all' || dateFilter !== 'all' || searchTerm !== '' || showPendingOnly
 
   const clearFilters = () => {
     setFilterStatus('all')
@@ -272,6 +273,7 @@ export default function RoomBookingHistory() {
     setSearchTerm('')
     setCustomStartDate('')
     setCustomEndDate('')
+    setShowPendingOnly(false)
   }
 
   const filteredHistory = bookingHistory
@@ -282,6 +284,7 @@ export default function RoomBookingHistory() {
         record.purpose.toLowerCase().includes(searchTerm.toLowerCase())
       
       const matchesStatus = (() => {
+        if (showPendingOnly) return record.status === "pending"
         if (filterStatus === "all") return true
         if (filterStatus === "denied") return record.status === "cancelled" && record.cancelledByType === "admin"
         if (filterStatus === "cancelled") return record.status === "cancelled" && record.cancelledByType === "user"
@@ -464,6 +467,21 @@ export default function RoomBookingHistory() {
                       </div>
                     </div>
                   )}
+                </div>
+
+                {/* Pending Filter */}
+                <div className="mb-4">
+                  <p className="text-xs font-semibold text-gray-600 mb-2">สถานะพิเศษ:</p>
+                  <button
+                    onClick={() => setShowPendingOnly(!showPendingOnly)}
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition ${
+                      showPendingOnly
+                        ? "bg-orange-500 text-white"
+                        : "border border-gray-300 text-gray-700 hover:border-orange-500"
+                    }`}
+                  >
+                    🔔 รอการอนุมัติ
+                  </button>
                 </div>
 
                 {/* Clear Filters Button */}
